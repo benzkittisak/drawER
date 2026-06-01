@@ -1,0 +1,47 @@
+# drawDB Live — DEVELOPMENT stack with hot reload.
+#   web  : Vite dev server (HMR) on :5173
+#   sync : Yjs server + SQLite, auto-restarted by nodemon, on :1234
+#
+# Usage:   docker compose -f docker-compose.dev.yml up --build     then open http://localhost:5173
+#
+# Source is bind-mounted into the containers so edits reload instantly; node_modules lives in an
+# anonymous volume so the host's (Windows) modules don't shadow the container's (Linux) ones.
+# Polling is enabled because Docker bind mounts on Windows/WSL don't emit native fs events.
+services:
+  sync:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    command: npx nodemon --legacy-watch --watch server server/sync/server.cjs
+    environment:
+      PORT: '1234'
+      DB_PATH: /data/drawer.sqlite
+    ports:
+      - '1234:1234'
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - drawer-dev-data:/data
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    command: npm run dev -- --host --port 5173
+    environment:
+      # Make Vite's file watcher poll the bind mount (reliable HMR on Windows/WSL).
+      CHOKIDAR_USEPOLLING: 'true'
+      # Browser reaches the sync server via the published host port.
+      VITE_SYNC_URL: ws://localhost:1234
+    ports:
+      - '5173:5173'
+    volumes:
+      - .:/app
+      - /app/node_modules
+    depends_on:
+      - sync
+    restart: unless-stopped
+
+volumes:
+  drawer-dev-data:

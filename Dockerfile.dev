@@ -1,0 +1,10 @@
+# Development image (hot reload). Installs the full dependency set; the source is bind-mounted
+# at runtime (see docker-compose.dev.yml) while node_modules is kept in an anonymous volume.
+# Used for BOTH services (web runs Vite dev, sync runs nodemon) via different commands.
+FROM node:24-alpine
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci
+# Source comes from the bind mount; default to the Vite dev server.
+EXPOSE 5173 1234
+CMD ["npm", "run", "dev", "--", "--host"]
