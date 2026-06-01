@@ -4,6 +4,7 @@
  */
 export * from './model/types';
 export * from './model/factory';
+export { relationshipsForTable } from './model/relationships';
 export { validateDiagram, isDiagram } from './model/guards';
 export { CATALOGS, TYPE_KEYS, typeDef } from './catalog';
 export type { TypeDef, TypeCatalog, TypeCategory } from './catalog';
@@ -16,6 +17,8 @@ export type { ExportOptions, Dialect } from './sql/export';
 // import + other formats
 export { importSql } from './sql/import/parse';
 export type { ImportResult } from './sql/import/parse';
+export { importFromNeutralSchema } from './sql/import/fromNeutral';
+export type { NeutralSchema, NeutralTable, NeutralColumn, NeutralForeignKey } from './sql/ast';
 export { dbmlToDiagram } from './dbml/import';
 export { diagramToDbml } from './dbml/export';
 export { diagramToMermaid } from './mermaid/export';

@@ -1,9 +1,16 @@
 /**
  * TopBar — brand, breadcrumb, panel toggles, real presence avatars, Share.
  */
-import { useConnection, useIdentity, useOthers } from '@store';
+import {
+  useConnection,
+  useDiagramMeta,
+  useEditorActions,
+  useIdentity,
+  useOthers,
+  useReadonly,
+} from '@store';
 import { Icon } from '@ui/Icon';
-import { Avatar, Btn } from '@ui/atoms';
+import { Avatar, Btn, EditableTitle } from '@ui/atoms';
 
 const STATUS = {
   connected: { label: 'Live · synced', color: 'var(--u-you)' },
@@ -15,7 +22,6 @@ const initials = (n: string): string =>
   n.split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase() || 'NA';
 
 interface TopBarProps {
-  doc: string;
   onDashboard: () => void;
   onShare: () => void;
   onHistory: () => void;
@@ -30,7 +36,6 @@ interface TopBarProps {
 const activeToggle = { color: 'var(--accent-strong)', background: 'var(--accent-soft)' };
 
 export function TopBar({
-  doc,
   onDashboard,
   onShare,
   onHistory,
@@ -41,6 +46,9 @@ export function TopBar({
   onToggleLeft,
   onToggleRight,
 }: TopBarProps) {
+  const { name } = useDiagramMeta();
+  const { renameDiagram } = useEditorActions();
+  const readonly = useReadonly();
   const me = useIdentity();
   const others = useOthers();
   const { connection } = useConnection();
@@ -66,10 +74,14 @@ export function TopBar({
       </div>
       <div className="crumb">
         <span className="crumb__sep">/</span>
-        <div className="crumb__doc">
-          <b>{doc}</b>
-          <Icon name="chevronDown" size={14} style={{ color: 'var(--ink-3)' }} />
-        </div>
+        <EditableTitle
+          className="crumb__doc"
+          value={name}
+          onCommit={renameDiagram}
+          activateOn="click"
+          disabled={readonly}
+          suffix={<Icon name="chevronDown" size={14} style={{ color: 'var(--ink-3)' }} />}
+        />
         <span className="saved">
           <span className="dot" style={{ background: status.color }} />
           {status.label}
@@ -80,21 +92,21 @@ export function TopBar({
       <Btn
         iconOnly
         variant="ghost"
-        icon="table"
-        title={leftOpen ? 'Hide tables panel' : 'Show tables panel'}
+        icon="grid"
+        title={leftOpen ? 'Hide schema panel' : 'Show schema panel'}
         aria-expanded={leftOpen}
         aria-controls="editor-left-panel"
         onClick={onToggleLeft}
         style={leftOpen ? activeToggle : undefined}
       />
-      <Btn iconOnly variant="ghost" icon="folder" title="Import SQL / DBML" onClick={onImport} />
-      <Btn iconOnly variant="ghost" icon="code" title="Export" onClick={onExport} />
+      <Btn iconOnly variant="ghost" icon="sql" title="Import SQL / DBML" onClick={onImport} />
+      <Btn iconOnly variant="ghost" icon="download" title="Export diagram" onClick={onExport} />
       <Btn iconOnly variant="ghost" icon="clock" title="Version history" onClick={onHistory} />
       <Btn
         iconOnly
         variant="ghost"
-        icon="users"
-        title={rightOpen ? 'Hide collaboration panel' : 'Show collaboration panel'}
+        icon="edit"
+        title={rightOpen ? 'Hide inspector panel' : 'Show inspector panel'}
         aria-expanded={rightOpen}
         aria-controls="editor-right-panel"
         onClick={onToggleRight}

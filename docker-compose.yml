@@ -1,12 +1,17 @@
-# drawDB Live — full stack.
-#   db   : PostgreSQL 16 (persistent volume)
-#   sync : Yjs websocket server + Postgres persistence on :1234
-#   web  : the built SPA served by nginx on :9901
+# drawDB Live — full stack (production).
+#   db   : PostgreSQL 16 (persistent volume; NOT published to the host)
+#   sync : Yjs websocket server + Postgres persistence + REST (/api/*) on :1234
+#   web  : the built SPA served by nginx on :9901 (nginx proxies /api/ → sync)
 #
 # Usage:   docker compose up --build      then open http://localhost:9901
 # The browser reaches the sync server via the published host port ws://localhost:1234,
 # which is what VITE_SYNC_URL is baked to below. To deploy elsewhere, rebuild web with
 # --build-arg VITE_SYNC_URL=wss://your-host (and publish the sync server there).
+#
+# Optional features are configured by env (a .env file beside this compose is auto-loaded).
+# They default OFF/safe in production — see the sync service below. Parity note: this mirrors
+# docker-compose.dev.yml, but dev defaults the DB-import flags ON to reach local databases,
+# whereas prod keeps them OFF (the server opens outbound connections to user-supplied DBs).
 services:
   db:
     image: postgres:16-alpine
@@ -30,7 +35,19 @@ services:
     environment:
       PORT: '1234'
       DATABASE_URL: postgres://drawer:drawer@db:5432/drawer
+      # "Generate with AI" (POST /api/ai/generate-schema) — inert until a key is provided.
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
+      # Remote DB import (Import → Database tab → POST /api/db/connect,/api/db/introspect).
+      # OFF by default in prod: enabling lets the server open outbound connections to
+      # user-supplied database URLs. Set ENABLE_REMOTE_DB_IMPORT=1 to turn it on.
+      ENABLE_REMOTE_DB_IMPORT: ${ENABLE_REMOTE_DB_IMPORT:-0}
+      # Keep 0 in prod — blocks connections to private/internal/loopback addresses (SSRF guard).
+      # (docker-compose.dev.yml sets this to 1 so it can reach localhost / the db container.)
+      DB_IMPORT_ALLOW_PRIVATE_NET: ${DB_IMPORT_ALLOW_PRIVATE_NET:-0}
+      DB_IMPORT_MAX_TABLES: ${DB_IMPORT_MAX_TABLES:-500}
+      DB_IMPORT_TIMEOUT_MS: ${DB_IMPORT_TIMEOUT_MS:-15000}
     ports:
       - '1234:1234'
     depends_on:

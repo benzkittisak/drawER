@@ -2,11 +2,22 @@
  * RightPanel — table editor (when a table is selected) + collaboration: People / Comments / Activity.
  */
 import { useEffect, useState } from 'react';
-import { useActivity, useComments, useConnection, useIdentity, useOthers, useSelectedRel, useSelection } from '@store';
+import {
+  useActivity,
+  useComments,
+  useConnection,
+  useIdentity,
+  useOthers,
+  useSelectedRel,
+  useSelection,
+  useRelationships,
+  useTables,
+} from '@store';
 import { Icon, type IconName } from '@ui/Icon';
 import { Avatar, Btn } from '@ui/atoms';
 import { AddRelationshipModal } from './AddRelationshipModal';
 import { RelationshipEditorPanel } from './RelationshipEditorPanel';
+import { RelationshipList } from './relationshipList';
 import { TableEditorPanel } from './TableEditorPanel';
 
 type Tab = 'table' | 'link' | 'people' | 'comments' | 'activity';
@@ -66,10 +77,13 @@ export function RightPanel({
   const [selectedRel, setSelectedRel] = useSelectedRel();
   const me = useIdentity();
   const others = useOthers();
+  const tables = useTables();
+  const rels = useRelationships();
   const comments = useComments();
   const activity = useActivity();
   const { connection } = useConnection();
   const open = comments.filter((c) => !c.resolved);
+  const selectedTable = selected ? tables.find((t) => t.id === selected) : undefined;
 
   useEffect(() => {
     if (selectedRel) setTab('link');
@@ -120,9 +134,18 @@ export function RightPanel({
           <div className="panel__body" style={{ paddingTop: 4 }}>
             {selectedRel ? (
               <RelationshipEditorPanel relId={selectedRel} onDeleted={() => setSelectedRel(null)} />
+            ) : selected ? (
+              <RelationshipList
+                rels={rels}
+                tables={tables}
+                tableId={selected}
+                tableName={selectedTable?.name}
+                selectedRel={selectedRel}
+                onSelectRel={setSelectedRel}
+              />
             ) : (
               <div className="te-empty te-empty--pad">
-                Select a line on the canvas, use <b>Add</b> to link tables without dragging, or open Relations on the left.
+                Select a table or relationship line on the canvas, or use <b>Add</b> to create a link.
               </div>
             )}
           </div>

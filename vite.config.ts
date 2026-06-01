@@ -37,7 +37,8 @@ export default defineConfig(({ mode }) => {
     test: {
       environment: 'jsdom',
       globals: true,
-      include: ['src/**/*.{test,spec}.{ts,tsx}'],
+      include: ['src/**/*.{test,spec}.{ts,tsx}', 'server/**/*.test.mjs'],
+      environmentMatchGlobs: [['server/**', 'node']],
       passWithNoTests: true,
     },
   };

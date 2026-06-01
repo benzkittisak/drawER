@@ -9,6 +9,8 @@
  * Env:  PORT, DATABASE_URL (default postgres://drawer:drawer@localhost:5432/drawer)
  *        OPENAI_API_KEY (optional — enables POST /api/ai/generate-schema)
  *        OPENAI_MODEL (default gpt-4o-mini), OPENAI_BASE_URL (default https://api.openai.com/v1)
+ *        ENABLE_REMOTE_DB_IMPORT=1 (optional — POST /api/db/connect, /api/db/introspect)
+ *        DB_IMPORT_ALLOW_PRIVATE_NET=1 (dev: allow localhost/private IPs)
  */
 const http = require('node:http');
 const path = require('node:path');
@@ -19,6 +21,7 @@ const Y = require('yjs');
 const { setupWSConnection, setPersistence } = require(
   path.join(__dirname, '..', '..', 'node_modules', 'y-websocket', 'bin', 'utils.cjs'),
 );
+const { handleDbRoutes } = require(path.join(__dirname, '..', 'db-introspect', 'index.cjs'));
 
 const PORT = Number(process.env.PORT || 1234);
 const DATABASE_URL =
@@ -161,6 +164,12 @@ const server = http.createServer(async (req, res) => {
     return;
   }
   try {
+    const url = req.url?.split('?')[0] ?? '';
+    if (req.method === 'POST' && url.startsWith('/api/db/')) {
+      const body = await readJsonBody(req);
+      req.body = body;
+      if (await handleDbRoutes(req, res, url, req.method)) return;
+    }
     if (req.method === 'POST' && req.url === '/api/ai/generate-schema') {
       if (!OPENAI_API_KEY) {
         res.statusCode = 503;

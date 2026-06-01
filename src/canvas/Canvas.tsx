@@ -36,6 +36,7 @@ import { RelationshipContextMenu } from './RelationshipContextMenu';
 import { RelationshipHitLayer, RelationshipLayer, type LinkingState } from './RelationshipLayer';
 import {
   cameraCenterDiagram,
+  cameraCenterTable,
   cameraFitDiagram,
   diagramBounds,
   nodeHeight,
@@ -44,6 +45,7 @@ import {
   type Camera,
   type DiagramBounds,
 } from './geometry';
+import { CanvasFind } from './CanvasFind';
 import { TableNode, type LockUser } from './TableNode';
 import type { Tool } from '@store';
 
@@ -469,6 +471,19 @@ export function Canvas({
     if (next) applyCam(next);
   }, [viewportCam, applyCam]);
 
+  const focusTable = useCallback(
+    (tableId: string) => {
+      const t = tables.find((tb) => tb.id === tableId);
+      if (!t) return;
+      setSelected(tableId);
+      setSelectedRel(null);
+      const r = wrapRef.current?.getBoundingClientRect();
+      if (!r) return;
+      applyCam(cameraCenterTable(t, r.width, r.height, camRef.current.z));
+    },
+    [tables, setSelected, setSelectedRel, applyCam],
+  );
+
   const addTableAtCenter = useCallback(() => {
     const r = wrapRef.current!.getBoundingClientRect();
     const p = toCanvas(r.left + r.width / 2, r.top + r.height / 2);
@@ -607,6 +622,8 @@ export function Canvas({
           Ctrl / ⌘ + scroll to zoom
         </span>
       </div>
+
+      <CanvasFind tables={tables} onPick={focusTable} />
 
       {relMenu && (
         <RelationshipContextMenu relId={relMenu.id} x={relMenu.x} y={relMenu.y} onClose={() => setRelMenu(null)} />

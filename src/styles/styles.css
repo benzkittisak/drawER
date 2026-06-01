@@ -192,6 +192,14 @@ button { font-family: inherit; cursor: pointer; }
 .crumb__doc { display: flex; align-items: center; gap: 7px; padding: 4px 8px; border-radius: 7px; }
 .crumb__doc:hover { background: var(--surface-2); }
 .crumb__doc b { color: var(--ink); font-size: 13.5px; font-weight: 700; }
+.editable-title { cursor: text; }
+.editable-title__input {
+  font: inherit; font-weight: 700; letter-spacing: inherit;
+  color: var(--ink); background: transparent; border: none; outline: none;
+  padding: 0; margin: 0; min-width: 4ch; width: 100%; max-width: 280px;
+}
+.crumb__doc .editable-title__input { font-size: 13.5px; }
+.card__name .editable-title__input { font-size: 15px; letter-spacing: -.01em; }
 .saved { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--ink-3); font-weight: 600; }
 .saved .dot { width: 6px; height: 6px; border-radius: 999px; background: var(--u-you); }
 
@@ -253,7 +261,7 @@ button { font-family: inherit; cursor: pointer; }
   background: var(--accent-soft);
 }
 .panel-collapse-btn--left { right: -11px; }
-.panel-collapse-btn--right { left: 8px; }
+.panel-collapse-btn--right { left: -11px; }
 .panel-resize-handle {
   position: absolute; left: 0; top: 0; bottom: 0; width: 7px; margin-left: -3px;
   cursor: col-resize; z-index: 50; touch-action: none;
@@ -536,6 +544,76 @@ button { font-family: inherit; cursor: pointer; }
 .canvas-hint {
   position: absolute; top: 14px; left: 14px; z-index: 20;
   display: flex; align-items: center; gap: 8px;
+}
+
+.canvas-find {
+  position: absolute; top: 14px; right: 14px; z-index: 20;
+  width: min(280px, calc(100% - 28px));
+}
+.canvas-find__field {
+  margin: 0;
+  width: 100%;
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+.canvas-find__field input { font-size: 13px; }
+.canvas-find__menu {
+  margin-top: 6px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: var(--shadow-pop);
+  overflow: hidden;
+  max-height: 280px;
+  overflow-y: auto;
+}
+.canvas-find__empty {
+  padding: 10px 12px;
+  font-size: 13px;
+  color: var(--ink-3);
+}
+.canvas-find__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.canvas-find__item:hover,
+.canvas-find__item--active {
+  background: var(--surface-2);
+}
+.canvas-find__swatch {
+  width: 8px;
+  height: 24px;
+  border-radius: 4px;
+  flex: none;
+}
+.canvas-find__name {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.canvas-find__meta {
+  font-size: 11px;
+  color: var(--ink-3);
+  flex: none;
+}
+
+.rel-list__scope {
+  padding: 4px 10px 8px;
+  font-size: 12px;
+  color: var(--ink-3);
+  line-height: 1.45;
 }
 
 /* ============================================================

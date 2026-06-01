@@ -22,6 +22,8 @@ rebuild of drawdb — see "Locked decisions" below.
     cross-device; IndexedDB is the offline cache. No auth (open by id/link). Dashboard lists from
     the DB (falls back to local when offline).
   - Heavy parsers (node-sql-parser / @dbml/core) are **lazy-loaded** (dynamic import).
+- **Remote DB import** (Import → Database): sync server introspects live DBs when
+  `ENABLE_REMOTE_DB_IMPORT=1` (see `docs/adr/0005-remote-db-import.md`).
   - `typecheck` / `lint` / `depcruise` / `test` (38) / `build` all green.
 - **Deferred (M7 / future):** accounts + server-persisted team workspace, roles/permissions,
   cross-diagram presence; self-hosted fonts (currently Google Fonts @import); i18n.

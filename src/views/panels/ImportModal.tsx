@@ -6,8 +6,9 @@ import { useRef, useState, type ChangeEvent } from 'react';
 import { dbmlToDiagram, DIALECT_LABELS, DIALECTS, importSql, parse, type DialectId } from '@core';
 import { useEditorActions } from '@store';
 import { Btn, Modal } from '@ui/atoms';
+import { DatabaseImportPanel } from './DatabaseImportPanel';
 
-type Source = 'sql' | 'dbml' | 'json';
+type Source = 'sql' | 'dbml' | 'json' | 'database';
 
 export function ImportModal({ onClose }: { onClose: () => void }) {
   const { loadDiagram } = useEditorActions();
@@ -63,21 +64,27 @@ export function ImportModal({ onClose }: { onClose: () => void }) {
       foot={
         <>
           <span style={{ flex: 1, fontSize: 11.5, color: 'var(--ink-3)' }}>
-            Paste or load a CREATE TABLE script, DBML, or a .drawdb.json. Replaces the current diagram.
+            {source === 'database'
+              ? 'Connect to a database via the sync server, or upload SQLite.'
+              : 'Paste or load a CREATE TABLE script, DBML, or a .drawdb.json. Replaces the current diagram.'}
           </span>
-          <input
-            ref={fileRef}
-            type="file"
-            accept=".json,.sql,.dbml,.txt,application/json,text/plain"
-            style={{ display: 'none' }}
-            onChange={onPickFile}
-          />
-          <Btn icon="download" onClick={() => fileRef.current?.click()}>
-            Load file…
-          </Btn>
-          <Btn variant="primary" icon="download" onClick={run}>
-            Import
-          </Btn>
+          {source !== 'database' && (
+            <>
+              <input
+                ref={fileRef}
+                type="file"
+                accept=".json,.sql,.dbml,.txt,application/json,text/plain"
+                style={{ display: 'none' }}
+                onChange={onPickFile}
+              />
+              <Btn icon="download" onClick={() => fileRef.current?.click()}>
+                Load file…
+              </Btn>
+              <Btn variant="primary" icon="download" onClick={run}>
+                Import
+              </Btn>
+            </>
+          )}
         </>
       }
     >
@@ -91,7 +98,13 @@ export function ImportModal({ onClose }: { onClose: () => void }) {
         <button className={source === 'json' ? 'active' : ''} onClick={() => setSource('json')}>
           JSON
         </button>
+        <button className={source === 'database' ? 'active' : ''} onClick={() => setSource('database')}>
+          Database
+        </button>
       </div>
+      {source === 'database' && (
+        <DatabaseImportPanel onImported={onClose} onWarnings={setWarnings} />
+      )}
       {source === 'sql' && (
         <div className="seg" style={{ marginBottom: 10, flexWrap: 'wrap' }}>
           {DIALECTS.map((d) => (
@@ -101,26 +114,32 @@ export function ImportModal({ onClose }: { onClose: () => void }) {
           ))}
         </div>
       )}
-      <textarea
-        autoFocus
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        placeholder={source === 'sql' ? 'CREATE TABLE users (\n  id INT PRIMARY KEY,\n  ...\n);' : 'Table users {\n  id int [pk]\n}'}
-        spellCheck={false}
-        style={{
-          width: '100%',
-          height: 240,
-          resize: 'vertical',
-          background: 'var(--surface-2)',
-          border: '1px solid var(--line)',
-          borderRadius: 10,
-          padding: '12px 14px',
-          fontFamily: 'var(--mono)',
-          fontSize: 12.5,
-          color: 'var(--ink)',
-          outline: 'none',
-        }}
-      />
+      {source !== 'database' && (
+        <textarea
+          autoFocus
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder={
+            source === 'sql'
+              ? 'CREATE TABLE users (\n  id INT PRIMARY KEY,\n  ...\n);'
+              : 'Table users {\n  id int [pk]\n}'
+          }
+          spellCheck={false}
+          style={{
+            width: '100%',
+            height: 240,
+            resize: 'vertical',
+            background: 'var(--surface-2)',
+            border: '1px solid var(--line)',
+            borderRadius: 10,
+            padding: '12px 14px',
+            fontFamily: 'var(--mono)',
+            fontSize: 12.5,
+            color: 'var(--ink)',
+            outline: 'none',
+          }}
+        />
+      )}
       {warnings.length > 0 && (
         <div
           style={{

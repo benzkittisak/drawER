@@ -3,7 +3,7 @@
  * library index that backs the Dashboard. The server PostgreSQL DB is the cross-device
  * source of truth for the library list and Yjs document bytes (via sync + REST push).
  */
-import { encodeDiagramState } from '@collab';
+import { encodeDiagramState, loadDiagramFromIndexedDB } from '@collab';
 import { parse, serializeToString, type Diagram } from '@core';
 
 const LIBRARY_KEY = 'drawer:library';
@@ -220,6 +220,56 @@ export function refreshDiagramLibrary(): Promise<LibrarySyncResult> {
     });
   }
   return refreshInFlight;
+}
+
+const UNTITLED_NAME = 'Untitled diagram';
+
+function normalizeDiagramName(raw: string): string {
+  const t = raw.trim();
+  return t || UNTITLED_NAME;
+}
+
+/** Rename a diagram in the library (localStorage / IndexedDB / server metadata). */
+export async function renameDiagramInLibrary(id: string, rawName: string): Promise<boolean> {
+  const name = normalizeDiagramName(rawName);
+  const at = Date.now();
+
+  let diagram = loadDiagram(id);
+  if (!diagram) {
+    try {
+      diagram = await loadDiagramFromIndexedDB(id);
+    } catch {
+      diagram = null;
+    }
+  }
+
+  if (diagram) {
+    saveDiagram({ ...diagram, name }, at);
+    return true;
+  }
+
+  const list = listDiagrams();
+  const existing = list.find((s) => s.id === id);
+  if (!existing) return false;
+
+  const summary: DiagramSummary = { ...existing, name, updatedAt: at };
+  writeLibrary([summary, ...list.filter((s) => s.id !== id)]);
+
+  try {
+    const res = await fetch(api(`/api/diagrams/${encodeURIComponent(id)}`), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: summary.name,
+        dialect: summary.dialect,
+        tableCount: summary.tableCount,
+        updatedAt: summary.updatedAt,
+      }),
+    });
+    return res.ok || res.status === 204;
+  } catch {
+    return false;
+  }
 }
 
 export function saveDiagram(diagram: Diagram, at: number = Date.now()): void {

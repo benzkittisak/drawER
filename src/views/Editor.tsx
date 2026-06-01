@@ -88,9 +88,22 @@ export function Editor({ diagramId, joinRoom = false, onDashboard, onHistory }: 
     }
   }, [joinRoom, shareRoom]);
 
-  // Autosave (debounced) to the local library.
+  // Autosave (debounced) to the local library — but NEVER persist an empty/placeholder diagram.
+  // On load/HMR the store briefly holds a blank (the 'untitled' sentinel, or a fabricated blank for a
+  // room whose real doc hasn't synced back yet). Without the empty guard the 800ms timer could win the
+  // race against session.open()'s IndexedDB/WebSocket restore and write a phantom 0-table card to the
+  // library + server. The signature check also skips no-op saves, so merely opening or hot-reloading a
+  // diagram no longer bumps updatedAt or re-PUTs to the server. Live edits still sync via Yjs
+  // independently; the explicit "New diagram" flow saves directly and is unaffected.
+  const lastSavedRef = useRef<string>('');
   useEffect(() => {
-    const t = setTimeout(() => saveDiagram(diagram), 800);
+    if (diagram.tables.length === 0 && diagram.relationships.length === 0) return;
+    const sig = `${diagram.id}|${JSON.stringify(diagram.tables)}|${JSON.stringify(diagram.relationships)}`;
+    if (sig === lastSavedRef.current) return;
+    const t = setTimeout(() => {
+      saveDiagram(diagram);
+      lastSavedRef.current = sig;
+    }, 800);
     return () => clearTimeout(t);
   }, [diagram]);
 
@@ -167,7 +180,6 @@ export function Editor({ diagramId, joinRoom = false, onDashboard, onHistory }: 
   return (
     <div className="app">
       <TopBar
-        doc={diagram.name}
         onDashboard={onDashboard}
         onShare={() => setShareOpen(true)}
         onHistory={onHistory}

@@ -4,10 +4,16 @@
  * Refreshes from PostgreSQL on mount (page load / return from editor).
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { deleteDiagram, refreshDiagramLibrary, useIdentity, type DiagramSummary } from '@store';
+import {
+  deleteDiagram,
+  refreshDiagramLibrary,
+  renameDiagramInLibrary,
+  useIdentity,
+  type DiagramSummary,
+} from '@store';
 import { DIALECT_LABELS, type DialectId } from '@core';
 import { Icon } from '@ui/Icon';
-import { Avatar, Btn } from '@ui/atoms';
+import { Avatar, Btn, EditableTitle } from '@ui/atoms';
 import { CreditsModal } from './panels/CreditsModal';
 
 interface MeUser {
@@ -60,11 +66,13 @@ function Card({
   me,
   onOpen,
   onDelete,
+  onRename,
 }: {
   d: DiagramSummary;
   me: MeUser;
   onOpen: () => void;
   onDelete: () => void;
+  onRename: (newName: string) => void;
 }) {
   const dbLabel = DIALECT_LABELS[d.dialect as DialectId] ?? d.dialect;
   return (
@@ -85,7 +93,13 @@ function Card({
       </div>
       <Thumb colors={d.colors} />
       <div className="card__body">
-        <div className="card__name">{d.name}</div>
+        <EditableTitle
+          className="card__name"
+          value={d.name}
+          onCommit={onRename}
+          activateOn="dblclick"
+          title="Double-click to rename"
+        />
         <div className="card__meta">
           <span className="chip" style={{ height: 18, padding: '0 7px', fontFamily: 'var(--mono)', fontSize: 10.5 }}>
             {dbLabel}
@@ -140,6 +154,21 @@ export function Dashboard({ onOpen, onNew }: DashboardProps) {
 
   const shown = useMemo(() => all.filter((d) => d.name.toLowerCase().includes(q.toLowerCase())), [all, q]);
 
+  const renameDiagram = async (d: DiagramSummary, newName: string) => {
+    const prevName = d.name;
+    const at = Date.now();
+    setAll((list) =>
+      list.map((x) => (x.id === d.id ? { ...x, name: newName, updatedAt: at } : x)),
+    );
+    const ok = await renameDiagramInLibrary(d.id, newName);
+    if (!ok) {
+      setAll((list) =>
+        list.map((x) => (x.id === d.id ? { ...x, name: prevName } : x)),
+      );
+      window.alert('Could not rename diagram. Try again when sync is up.');
+    }
+  };
+
   const removeDiagram = async (d: DiagramSummary) => {
     if (!window.confirm(`Delete "${d.name}"? This cannot be undone.`)) return;
     const ok = await deleteDiagram(d.id);
@@ -191,7 +220,14 @@ export function Dashboard({ onOpen, onNew }: DashboardProps) {
 
         <div className="grid">
           {shown.map((d) => (
-            <Card key={d.id} d={d} me={me} onOpen={() => onOpen(d.id)} onDelete={() => removeDiagram(d)} />
+            <Card
+              key={d.id}
+              d={d}
+              me={me}
+              onOpen={() => onOpen(d.id)}
+              onDelete={() => removeDiagram(d)}
+              onRename={(name) => renameDiagram(d, name)}
+            />
           ))}
           <div className="card card--new" onClick={onNew}>
             <div style={{ textAlign: 'center' }}>

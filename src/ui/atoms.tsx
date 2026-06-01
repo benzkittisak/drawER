@@ -11,6 +11,8 @@ import {
 } from 'react';
 import { Icon, type IconName } from './Icon';
 
+export { EditableTitle, type EditableTitleProps } from './EditableTitle';
+
 /** Minimal person shape an Avatar needs (the seed/awareness user). */
 export interface AvatarUser {
   id: string;

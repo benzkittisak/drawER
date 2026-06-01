@@ -89,7 +89,23 @@ export function cameraCenterDiagram(
   z = 1,
 ): Camera {
   const clamped = Math.min(2, Math.max(0.3, z));
-  return cameraCenteredOn(bounds, viewportW, viewportH, clamped);
+  return snapCamera(cameraCenteredOn(bounds, viewportW, viewportH, clamped));
+}
+
+function tableBounds(table: Table): DiagramBounds {
+  const h = nodeHeight(table);
+  return {
+    minX: table.position.x,
+    minY: table.position.y,
+    maxX: table.position.x + NODE_W,
+    maxY: table.position.y + h,
+  };
+}
+
+/** Center the viewport on one table at the given zoom (keeps current zoom when passed through). */
+export function cameraCenterTable(table: Table, viewportW: number, viewportH: number, z: number): Camera {
+  const clamped = Math.min(2, Math.max(0.3, z));
+  return snapCamera(cameraCenteredOn(tableBounds(table), viewportW, viewportH, clamped));
 }
 
 export interface RelGeometry {

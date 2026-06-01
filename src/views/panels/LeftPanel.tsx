@@ -3,11 +3,11 @@
  * advisory locks come from real teammate presence.
  */
 import { useState } from 'react';
-import { CARDINALITY_LABEL } from '@core';
 import { useCanvasPresence, useRelationships, useSelectedRel, useSelection, useTables } from '@store';
 import { Icon } from '@ui/Icon';
 import { Btn } from '@ui/atoms';
 import { AddRelationshipModal } from './AddRelationshipModal';
+import { RelationshipList } from './relationshipList';
 
 export function LeftPanel() {
   const tables = useTables();
@@ -17,9 +17,10 @@ export function LeftPanel() {
   const [selectedRel, setSelectedRel] = useSelectedRel();
   const [tab, setTab] = useState<'tables' | 'rels'>('tables');
   const [q, setQ] = useState('');
+  const [relQ, setRelQ] = useState('');
   const [addRelOpen, setAddRelOpen] = useState(false);
-  const byId = Object.fromEntries(tables.map((t) => [t.id, t]));
   const filtered = tables.filter((t) => t.name.toLowerCase().includes(q.toLowerCase()));
+  const selectedTable = selected ? tables.find((t) => t.id === selected) : undefined;
 
   return (
     <div className="panel panel--left">
@@ -75,56 +76,34 @@ export function LeftPanel() {
         <>
           <div className="panel__head" style={{ padding: '8px 10px 4px' }}>
             <span className="panel__title">Foreign keys</span>
-            <Btn
-              sm
-              variant="primary"
-              icon="plus"
-              onClick={() => setAddRelOpen(true)}
-            >
+            <Btn sm variant="primary" icon="plus" onClick={() => setAddRelOpen(true)}>
               Add
             </Btn>
           </div>
+          <div className="search">
+            <Icon name="search" size={15} />
+            <input
+              placeholder="Search relations…"
+              value={relQ}
+              onChange={(e) => setRelQ(e.target.value)}
+            />
+          </div>
           <div className="panel__body" style={{ paddingTop: 4 }}>
-          {rels.map((r) => {
-            const a = byId[r.fromTableId];
-            const b = byId[r.toTableId];
-            if (!a || !b) return null;
-            const af = a.fields.find((f) => f.id === r.fromFieldId);
-            const bf = b.fields.find((f) => f.id === r.toFieldId);
-            return (
-              <div
-                key={r.id}
-                className={'rl' + (selectedRel === r.id ? ' active' : '')}
-                onClick={() => setSelectedRel(r.id)}
-              >
-                <div className="rl__top">
-                  <span className="chip" style={{ height: 18, padding: '0 6px' }}>
-                    {CARDINALITY_LABEL[r.cardinality]}
-                  </span>
-                  <span className="rl__card">
-                    {a.name} → {b.name}
-                  </span>
-                </div>
-                <div className="rl__bot">
-                  {af?.name} references {b.name}({bf?.name})
-                </div>
-              </div>
-            );
-          })}
-          {rels.length === 0 && (
-            <div style={{ padding: '12px 10px', color: 'var(--ink-3)', fontSize: 13, lineHeight: 1.55 }}>
-              No relationships yet. Use <b>Add</b> above, or drag from a field grip on the canvas.
-            </div>
-          )}
+            <RelationshipList
+              rels={rels}
+              tables={tables}
+              tableId={selected ?? undefined}
+              tableName={selectedTable?.name}
+              selectedRel={selectedRel}
+              onSelectRel={setSelectedRel}
+              searchQuery={relQ}
+            />
           </div>
         </>
       )}
 
       {addRelOpen && (
-        <AddRelationshipModal
-          fromTableId={selected ?? undefined}
-          onClose={() => setAddRelOpen(false)}
-        />
+        <AddRelationshipModal fromTableId={selected ?? undefined} onClose={() => setAddRelOpen(false)} />
       )}
     </div>
   );

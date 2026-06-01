@@ -5,11 +5,11 @@
  * Oracle falls back to the Postgres grammar (flagged).
  */
 import { autoLayout } from '../../layout/autoLayout';
-import { createDiagram, createField, createRelationship, createTable } from '../../model/factory';
+import { createDiagram } from '../../model/factory';
 import { newId } from '../../id';
-import type { Cardinality, Diagram, DialectId, RefAction } from '../../model/types';
+import type { Diagram, DialectId } from '../../model/types';
 import type { NeutralColumn, NeutralForeignKey, NeutralSchema, NeutralTable } from '../ast';
-import { reverseType } from './typeMap';
+import { buildDiagramFromNeutral } from './buildDiagram';
 
 export interface ImportResult {
   diagram: Diagram;
@@ -69,13 +69,6 @@ function defaultToString(node?: { type?: string; value?: unknown }): string | un
   return String(v);
 }
 
-function normalizeAction(raw?: string): RefAction | undefined {
-  if (!raw) return undefined;
-  const u = raw.toUpperCase();
-  const allowed: RefAction[] = ['NO ACTION', 'RESTRICT', 'CASCADE', 'SET NULL', 'SET DEFAULT'];
-  return allowed.find((a) => a === u);
-}
-
 function toNeutralTable(stmt: CreateStmt, warnings: string[]): NeutralTable | null {
   const meta = stmt.table?.[0];
   const name = meta?.table;
@@ -124,62 +117,6 @@ function toNeutralTable(stmt: CreateStmt, warnings: string[]): NeutralTable | nu
   return { name, schema: meta?.schema, columns, primaryKey, foreignKeys };
 }
 
-function buildDiagram(schema: NeutralSchema, dialect: DialectId): Diagram {
-  const d = createDiagram(newId(), 'Imported schema', dialect);
-  const tableIdByName = new Map<string, string>();
-  const fieldIdByName = new Map<string, string>(); // key: `${tableName}.${colName}`
-
-  for (const t of schema.tables) {
-    const tableId = newId();
-    tableIdByName.set(t.name, tableId);
-    const pkSet = new Set(t.primaryKey);
-    const fields = t.columns.map((c) => {
-      const fieldId = newId();
-      fieldIdByName.set(`${t.name}.${c.name}`, fieldId);
-      const { key, autoIncrement } = reverseType(c.dataType);
-      return createField(fieldId, c.name, key, {
-        primary: c.primary || pkSet.has(c.name),
-        notNull: c.notNull,
-        unique: c.unique,
-        autoIncrement: c.autoIncrement || autoIncrement,
-        size: c.size,
-        scale: c.scale,
-        default: c.default,
-      });
-    });
-    d.tables.push(createTable(tableId, t.name, { schema: t.schema, fields, position: { x: 0, y: 0 } }));
-  }
-
-  for (const t of schema.tables) {
-    for (const fk of t.foreignKeys) {
-      const fromTableId = tableIdByName.get(t.name);
-      const toTableId = tableIdByName.get(fk.refTable);
-      const fromFieldId = fieldIdByName.get(`${t.name}.${fk.columns[0]}`);
-      const toFieldId = fieldIdByName.get(`${fk.refTable}.${fk.refColumns[0]}`);
-      if (!fromTableId || !toTableId || !fromFieldId || !toFieldId) {
-        schema.warnings.push(`Could not resolve foreign key on ${t.name} → ${fk.refTable}`);
-        continue;
-      }
-      const card: Cardinality = 'many_to_one';
-      d.relationships.push(
-        createRelationship(
-          newId(),
-          { tableId: fromTableId, fieldId: fromFieldId },
-          { tableId: toTableId, fieldId: toFieldId },
-          {
-            name: fk.name ?? `fk_${t.name}_${fk.columns[0]}`,
-            cardinality: card,
-            onDelete: normalizeAction(fk.onDelete) ?? 'NO ACTION',
-            onUpdate: normalizeAction(fk.onUpdate) ?? 'NO ACTION',
-          },
-        ),
-      );
-    }
-  }
-
-  return d;
-}
-
 export async function importSql(sql: string, dialect: DialectId): Promise<ImportResult> {
   const warnings: string[] = [];
   if (dialect === 'oracle') warnings.push('Oracle import is best-effort (parsed with the Postgres grammar).');
@@ -208,6 +145,6 @@ export async function importSql(sql: string, dialect: DialectId): Promise<Import
   }
 
   const schema: NeutralSchema = { tables, warnings };
-  const diagram = await autoLayout(buildDiagram(schema, dialect));
+  const diagram = await autoLayout(buildDiagramFromNeutral(schema, dialect));
   return { diagram, warnings: schema.warnings };
 }

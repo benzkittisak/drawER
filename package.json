@@ -20,8 +20,12 @@
   },
   "dependencies": {
     "@dbml/core": "^8.2.4",
+    "better-sqlite3": "^11.10.0",
     "dagre": "^0.8.5",
+    "mssql": "^11.0.1",
+    "mysql2": "^3.14.1",
     "node-sql-parser": "^5.4.0",
+    "oracledb": "^6.8.0",
     "pg": "^8.21.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
