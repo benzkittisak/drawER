@@ -38,7 +38,13 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
 const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
 const OPENAI_BASE_URL = (process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '');
 
-const pool = new Pool({ connectionString: DATABASE_URL });
+// Bound the pool so a burst of clients can't exhaust Postgres connections, and reclaim idle ones.
+const pool = new Pool({
+  connectionString: DATABASE_URL,
+  max: 10,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 5000,
+});
 const timers = new Map();
 
 async function initDb() {
@@ -52,6 +58,9 @@ async function initDb() {
       updated_at  BIGINT
     )
   `);
+  // GET /api/diagrams orders by updated_at DESC — index it so the dashboard list stays fast as the
+  // library grows (avoids a full scan + sort).
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_docs_updated_at ON docs (updated_at DESC)');
 }
 
 async function loadDoc(name) {
@@ -122,31 +131,39 @@ async function generateSchemaSql(prompt, dialect) {
     `Output ONLY valid ${dialect} SQL DDL: CREATE TABLE statements and ALTER TABLE ... ADD CONSTRAINT for foreign keys.`,
     `No markdown fences, no explanations, no prose before or after the SQL.`,
   ].join(' ');
-  const res = await fetch(`${OPENAI_BASE_URL}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${OPENAI_API_KEY}`,
-    },
-    body: JSON.stringify({
-      model: OPENAI_MODEL,
-      messages: [
-        { role: 'system', content: system },
-        { role: 'user', content: prompt },
-      ],
-      temperature: 0.2,
-    }),
-  });
-  const data = await res.json();
-  if (!res.ok) {
-    const msg = data?.error?.message || `OpenAI request failed (${res.status})`;
-    throw new Error(msg);
+  // Abort if the upstream stalls — otherwise a slow/unreachable OpenAI hangs the HTTP request open.
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30000);
+  try {
+    const res = await fetch(`${OPENAI_BASE_URL}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: OPENAI_MODEL,
+        messages: [
+          { role: 'system', content: system },
+          { role: 'user', content: prompt },
+        ],
+        temperature: 0.2,
+      }),
+      signal: controller.signal,
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      const msg = data?.error?.message || `OpenAI request failed (${res.status})`;
+      throw new Error(msg);
+    }
+    const content = data?.choices?.[0]?.message?.content;
+    if (!content || typeof content !== 'string') {
+      throw new Error('OpenAI returned no SQL content');
+    }
+    return stripSqlFences(content);
+  } finally {
+    clearTimeout(timeout);
   }
-  const content = data?.choices?.[0]?.message?.content;
-  if (!content || typeof content !== 'string') {
-    throw new Error('OpenAI returned no SQL content');
-  }
-  return stripSqlFences(content);
 }
 
 function readJsonBody(req) {
@@ -173,6 +190,13 @@ const server = http.createServer(async (req, res) => {
   }
   try {
     const url = req.url?.split('?')[0] ?? '';
+    // Cheap liveness probe for container healthchecks — no DB round-trip.
+    if (req.method === 'GET' && url === '/healthz') {
+      res.statusCode = 200;
+      res.setHeader('Content-Type', 'text/plain');
+      res.end('ok');
+      return;
+    }
     if (req.method === 'POST' && url.startsWith('/api/db/')) {
       const body = await readJsonBody(req);
       req.body = body;

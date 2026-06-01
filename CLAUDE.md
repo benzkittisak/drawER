@@ -26,7 +26,9 @@ rebuild of drawdb — see "Locked decisions" below.
   `ENABLE_REMOTE_DB_IMPORT=1` (see `docs/adr/0005-remote-db-import.md`).
   - `typecheck` / `lint` / `depcruise` / `test` (38) / `build` all green.
 - **Deferred (M7 / future):** accounts + server-persisted team workspace, roles/permissions,
-  cross-diagram presence; self-hosted fonts (currently Google Fonts @import); i18n.
+  cross-diagram presence; i18n.
+- **Fonts are self-hosted** (bundled woff2 via `@fontsource-variable/*`, loaded in `src/main.tsx`);
+  no remote Google Fonts request.
 - Verify live collaboration: `bun run sync`, then open the same diagram in two windows and Share.
 
 ## Locked decisions (do not re-litigate — see `docs/adr/`)

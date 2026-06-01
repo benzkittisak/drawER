@@ -149,6 +149,115 @@ export function readDiagram(maps: DocMaps): Diagram {
   };
 }
 
+function refsEqual<T>(a: readonly T[] | null | undefined, b: readonly T[]): boolean {
+  if (!a || a.length !== b.length) return false;
+  for (let i = 0; i < b.length; i++) if (a[i] !== b[i]) return false;
+  return true;
+}
+
+/**
+ * Stateful variant of `readDiagram` that preserves object identity for the parts that didn't
+ * change between calls: an unchanged table/relationship/aux-array keeps its previous reference, and
+ * the whole `Diagram` keeps its reference when nothing changed at all. This lets `React.memo` and
+ * the zustand selectors skip work — editing one table re-renders only that table instead of every
+ * table in the diagram. The derived content is identical to `readDiagram` (lossless round-trip);
+ * only the references are reused. One reader is created per open document (see session.ts).
+ */
+export function createDiagramReader(): (maps: DocMaps) => Diagram {
+  let prev: Diagram | null = null;
+  const tableCache = new Map<string, { obj: Table; sig: string }>();
+  const relCache = new Map<string, { obj: Relationship; sig: string }>();
+  const auxCache = new Map<string, { obj: unknown[]; sig: string }>();
+
+  // Clone + cache an aux LWW array (notes/areas/customTypes/enums), reusing the prior array when
+  // its serialized content is unchanged.
+  const stableList = <T>(name: string, raw: unknown): T[] => {
+    const arr = ((raw as T[]) ?? []).map((x) => ({ ...(x as object) }) as T);
+    const sig = JSON.stringify(arr);
+    const cached = auxCache.get(name);
+    if (cached && cached.sig === sig) return cached.obj as T[];
+    auxCache.set(name, { obj: arr as unknown[], sig });
+    return arr;
+  };
+
+  return (maps: DocMaps): Diagram => {
+    const seenT = new Set<string>();
+    const tables: Table[] = [];
+    for (const ym of Array.from(maps.tables.values()) as YMap[]) {
+      const t = yToTable(ym);
+      seenT.add(t.id);
+      const sig = JSON.stringify(t);
+      const cached = tableCache.get(t.id);
+      if (cached && cached.sig === sig) tables.push(cached.obj);
+      else {
+        tableCache.set(t.id, { obj: t, sig });
+        tables.push(t);
+      }
+    }
+    for (const id of [...tableCache.keys()]) if (!seenT.has(id)) tableCache.delete(id);
+
+    const seenR = new Set<string>();
+    const relationships: Relationship[] = [];
+    for (const ym of Array.from(maps.rels.values()) as YMap[]) {
+      const r = yToRel(ym);
+      seenR.add(r.id);
+      const sig = JSON.stringify(r);
+      const cached = relCache.get(r.id);
+      if (cached && cached.sig === sig) relationships.push(cached.obj);
+      else {
+        relCache.set(r.id, { obj: r, sig });
+        relationships.push(r);
+      }
+    }
+    for (const id of [...relCache.keys()]) if (!seenR.has(id)) relCache.delete(id);
+
+    const tablesRef = prev && refsEqual(prev.tables, tables) ? prev.tables : tables;
+    const relsRef = prev && refsEqual(prev.relationships, relationships) ? prev.relationships : relationships;
+    const notes = stableList<Note>('notes', maps.aux.get('notes'));
+    const areas = stableList<Area>('areas', maps.aux.get('areas'));
+    const customTypes = stableList<CustomType>('customTypes', maps.aux.get('customTypes'));
+    const enums = stableList<EnumType>('enums', maps.aux.get('enums'));
+
+    const id = (maps.meta.get('id') as string) ?? '';
+    const name = (maps.meta.get('name') as string) ?? 'Untitled diagram';
+    const dialect = ((maps.meta.get('dialect') as DialectId) ?? 'postgres') as DialectId;
+    const createdAt = (maps.meta.get('createdAt') as number) ?? 0;
+    const updatedAt = (maps.meta.get('updatedAt') as number) ?? 0;
+
+    if (
+      prev &&
+      prev.id === id &&
+      prev.name === name &&
+      prev.dialect === dialect &&
+      prev.meta.createdAt === createdAt &&
+      prev.meta.updatedAt === updatedAt &&
+      prev.tables === tablesRef &&
+      prev.relationships === relsRef &&
+      prev.notes === notes &&
+      prev.areas === areas &&
+      prev.customTypes === customTypes &&
+      prev.enums === enums
+    ) {
+      return prev; // nothing changed — hand back the exact same object so all consumers skip
+    }
+
+    const next: Diagram = {
+      id,
+      name,
+      dialect,
+      tables: tablesRef,
+      relationships: relsRef,
+      notes,
+      areas,
+      customTypes,
+      enums,
+      meta: { createdAt, updatedAt },
+    };
+    prev = next;
+    return next;
+  };
+}
+
 // ---- mutators (call inside a transaction) ----
 const tableMap = (maps: DocMaps, id: string): YMap | undefined => maps.tables.get(id);
 const fieldArray = (t: YMap): YArr => t.get('fields') as YArr;

@@ -13,6 +13,26 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [react()],
+    build: {
+      // Match tsconfig.app.json so Vite doesn't down-transpile modern syntax we already target.
+      target: 'es2022',
+      sourcemap: false,
+      chunkSizeWarningLimit: 1200,
+      rollupOptions: {
+        output: {
+          // Split the stable vendor libraries into their own long-cached chunks so an app-code
+          // change doesn't bust them. The heavy parsers (@dbml/core, node-sql-parser, dagre) are
+          // dynamically imported elsewhere and stay in their own on-demand chunks — left untouched.
+          manualChunks(id) {
+            if (!id.includes('node_modules')) return undefined;
+            if (/[\\/]node_modules[\\/](react|react-dom|scheduler)[\\/]/.test(id)) return 'react';
+            if (/[\\/]node_modules[\\/](yjs|y-protocols|y-websocket|y-indexeddb|lib0)[\\/]/.test(id))
+              return 'yjs';
+            return undefined;
+          },
+        },
+      },
+    },
     server: {
       host: true,
       port: 5173,

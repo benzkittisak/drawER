@@ -16,7 +16,7 @@ import { IndexeddbPersistence } from 'y-indexeddb';
 import { WebsocketProvider } from 'y-websocket';
 import type { Diagram } from '@core';
 import { createDoc, isEmpty, LOCAL_ORIGIN, type DocMaps } from './ydoc';
-import { mut, readDiagram, writeDiagram } from './schema';
+import { createDiagramReader, mut, readDiagram, writeDiagram } from './schema';
 import { commentMut, readComments, type Comment, type CommentReply } from './comments';
 import { pushActivity, readActivity, type ActivityEntry } from './activity';
 import {
@@ -24,6 +24,7 @@ import {
   setLocalPresence,
   setLocalUser,
   type Activity,
+  type PresenceState,
   type PresenceUser,
   type RemotePresence,
 } from './awareness';
@@ -40,8 +41,11 @@ type ConnectionListener = (c: ConnectionState) => void;
 type OthersListener = (others: RemotePresence[]) => void;
 type CommentsListener = (comments: Comment[]) => void;
 type ActivityListener = (activity: ActivityEntry[]) => void;
+type PresencePatch = Partial<Pick<PresenceState, 'cursor' | 'selection' | 'activity'>>;
 
 const SYNC_URL = (import.meta.env.VITE_SYNC_URL as string | undefined) || 'ws://localhost:1234';
+/** Cap the in-memory undo history so a long editing session can't grow it without bound. */
+const MAX_UNDO_STACK = 300;
 
 class CollabSession {
   private doc: Y.Doc | null = null;
@@ -49,6 +53,9 @@ class CollabSession {
   private idb: IndexeddbPersistence | null = null;
   private ws: WebsocketProvider | null = null;
   private undoMgr: Y.UndoManager | null = null;
+  /** Identity-stable diagram reader (one per open doc) — see createDiagramReader. */
+  private reader: ((maps: DocMaps) => Diagram) | null = null;
+  private lastSnapshot: Diagram | null = null;
 
   private onSnapshot: SnapshotListener | null = null;
   private onConnection: ConnectionListener | null = null;
@@ -83,6 +90,8 @@ class CollabSession {
     });
   }
   private flushScheduled = false;
+  private pendingPresence: PresencePatch | null = null;
+  private presenceFlushScheduled = false;
 
   /**
    * Open a diagram. Local-first (IndexedDB) AND always connected to the server DB so data
@@ -97,6 +106,7 @@ class CollabSession {
     this.maps = maps;
     this.onSnapshot = onSnapshot;
     this.roomId = diagram.id;
+    this.reader = createDiagramReader();
 
     this.idb = new IndexeddbPersistence(`drawer-${diagram.id}`, doc);
     await this.idb.whenSynced;
@@ -113,6 +123,13 @@ class CollabSession {
 
     this.undoMgr = new Y.UndoManager([maps.meta, maps.tables, maps.rels, maps.aux], {
       trackedOrigins: new Set([LOCAL_ORIGIN]),
+      captureTimeout: 500,
+    });
+    // Bound the undo stack: drop the oldest steps once it exceeds the cap (listener is torn down
+    // with the manager in teardown()).
+    this.undoMgr.on('stack-item-added', () => {
+      const stack = this.undoMgr?.undoStack;
+      if (stack && stack.length > MAX_UNDO_STACK) stack.splice(0, stack.length - MAX_UNDO_STACK);
     });
 
     maps.tables.observeDeep(this.observer);
@@ -137,7 +154,12 @@ class CollabSession {
     });
   }
   private flush(): void {
-    if (this.maps) this.onSnapshot?.(readDiagram(this.maps));
+    if (!this.maps || !this.reader) return;
+    const snap = this.reader(this.maps);
+    // The reader returns the SAME object when nothing changed — skip the redundant store update.
+    if (snap === this.lastSnapshot) return;
+    this.lastSnapshot = snap;
+    this.onSnapshot?.(snap);
   }
 
   snapshot(): Diagram | null {
@@ -220,16 +242,36 @@ class CollabSession {
   getRoomId(): string | null {
     return this.roomId;
   }
+  /** True when a live websocket session is already syncing this diagram to the server (connected +
+   *  initial sync done). In that case the sync server persists the doc (data + metadata) itself, so
+   *  a client-side REST PUT for the same diagram is redundant. */
+  isServerPersisting(diagramId: string): boolean {
+    return !!this.ws && this.ws.wsconnected && this.ws.synced && this.roomId === diagramId;
+  }
 
-  // ---- presence (no-ops when not in a room) ----
+  // ---- presence (no-ops when not in a room; coalesced into one awareness write per microtask) ----
   setCursor(cursor: { x: number; y: number } | null): void {
-    if (this.ws) setLocalPresence(this.ws.awareness, { cursor });
+    this.queuePresence({ cursor });
   }
   setSelection(selection: string[]): void {
-    if (this.ws) setLocalPresence(this.ws.awareness, { selection });
+    this.queuePresence({ selection });
   }
   setActivity(activity: Activity): void {
-    if (this.ws) setLocalPresence(this.ws.awareness, { activity });
+    this.queuePresence({ activity });
+  }
+  /** Merge presence patches fired in the same tick (e.g. selection + activity on one click) into a
+   *  single awareness broadcast, instead of one network packet per field. */
+  private queuePresence(patch: PresencePatch): void {
+    if (!this.ws) return;
+    this.pendingPresence = { ...this.pendingPresence, ...patch };
+    if (this.presenceFlushScheduled) return;
+    this.presenceFlushScheduled = true;
+    queueMicrotask(() => {
+      this.presenceFlushScheduled = false;
+      const merged = this.pendingPresence;
+      this.pendingPresence = null;
+      if (this.ws && merged) setLocalPresence(this.ws.awareness, merged);
+    });
   }
 
   // ---- sharing ----
@@ -294,6 +336,10 @@ class CollabSession {
     this.idb?.destroy();
     this.doc?.destroy();
     this.doc = this.maps = this.idb = this.undoMgr = null;
+    this.reader = null;
+    this.lastSnapshot = null;
+    this.pendingPresence = null;
+    this.presenceFlushScheduled = false;
   }
 }
 

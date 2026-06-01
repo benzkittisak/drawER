@@ -20,6 +20,8 @@
   },
   "dependencies": {
     "@dbml/core": "^8.2.4",
+    "@fontsource-variable/hanken-grotesk": "^5.2.8",
+    "@fontsource-variable/jetbrains-mono": "^5.2.8",
     "better-sqlite3": "^11.10.0",
     "dagre": "^0.8.5",
     "mssql": "^11.0.1",

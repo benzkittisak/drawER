@@ -25,6 +25,8 @@ export interface DiffTag {
 }
 
 const key = (diagramId: string) => `drawer:versions:${diagramId}`;
+/** Retain only the most recent N snapshots per diagram so localStorage can't grow without bound. */
+const MAX_VERSIONS = 50;
 
 function b64encode(u8: Uint8Array): string {
   let s = '';
@@ -63,7 +65,8 @@ export function saveVersion(diagramId: string, label: string, author: PresenceUs
     ts: at,
     update: b64encode(update),
   };
-  const all = [...read(diagramId), v];
+  // Append the new snapshot and keep only the most recent MAX_VERSIONS (stored oldest→newest).
+  const all = [...read(diagramId), v].slice(-MAX_VERSIONS);
   try {
     localStorage.setItem(key(diagramId), JSON.stringify(all));
   } catch {

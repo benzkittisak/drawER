@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { buildSampleDiagram } from '@core/sql/__tests__/sampleModel';
 import { createField, createRelationship } from '@core';
 import { createDoc } from './ydoc';
-import { mut, readDiagram, writeDiagram } from './schema';
+import { createDiagramReader, mut, readDiagram, writeDiagram } from './schema';
 
 function docWithSample() {
   const { doc, maps } = createDoc();
@@ -45,6 +45,42 @@ describe('Yjs schema mapping', () => {
     const { doc, maps } = docWithSample();
     doc.transact(() => mut.removeField(maps, 'users', 'u_org'));
     expect(readDiagram(maps).relationships).toEqual([]);
+  });
+});
+
+describe('createDiagramReader (identity caching)', () => {
+  it('derives the same content as readDiagram (lossless)', () => {
+    const { maps } = docWithSample();
+    const read = createDiagramReader();
+    expect(read(maps)).toEqual(buildSampleDiagram());
+  });
+
+  it('returns the identical Diagram object when nothing changed', () => {
+    const { maps } = docWithSample();
+    const read = createDiagramReader();
+    const a = read(maps);
+    expect(read(maps)).toBe(a); // same reference → consumers skip entirely
+  });
+
+  it('reuses references for unchanged tables/rels and only swaps the edited one', () => {
+    const { doc, maps } = docWithSample();
+    const read = createDiagramReader();
+    const first = read(maps);
+    const usersBefore = first.tables.find((t) => t.id === 'users')!;
+    const orgsBefore = first.tables.find((t) => t.id === 'orgs')!;
+
+    doc.transact(() => mut.setTablePosition(maps, 'users', 123, 456));
+    const second = read(maps);
+
+    expect(second).not.toBe(first); // something changed → new Diagram object
+    const usersAfter = second.tables.find((t) => t.id === 'users')!;
+    const orgsAfter = second.tables.find((t) => t.id === 'orgs')!;
+    expect(usersAfter).not.toBe(usersBefore); // edited table → fresh reference
+    expect(usersAfter.position).toEqual({ x: 123, y: 456 });
+    expect(orgsAfter).toBe(orgsBefore); // untouched table → same reference
+    expect(second.relationships).toBe(first.relationships); // untouched rels → same array reference
+    // ...and content still matches the plain reader after the edit.
+    expect(second).toEqual(readDiagram(maps));
   });
 });
 

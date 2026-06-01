@@ -95,14 +95,21 @@ export function Editor({ diagramId, joinRoom = false, onDashboard, onHistory }: 
   // library + server. The signature check also skips no-op saves, so merely opening or hot-reloading a
   // diagram no longer bumps updatedAt or re-PUTs to the server. Live edits still sync via Yjs
   // independently; the explicit "New diagram" flow saves directly and is unaffected.
-  const lastSavedRef = useRef<string>('');
+  // The collab reader hands back identity-stable `tables`/`relationships` arrays — a fresh reference
+  // only when their content actually changed (see createDiagramReader). So an O(1) reference check
+  // replaces the per-keystroke O(n) JSON.stringify that used to gate this autosave. The empty guard
+  // (never persist a blank/placeholder) and the 800 ms debounce both stay — they prevent the
+  // phantom 0-table card on refresh/HMR.
+  const lastSavedRef = useRef<{ tables: unknown; rels: unknown } | null>(null);
   useEffect(() => {
     if (diagram.tables.length === 0 && diagram.relationships.length === 0) return;
-    const sig = `${diagram.id}|${JSON.stringify(diagram.tables)}|${JSON.stringify(diagram.relationships)}`;
-    if (sig === lastSavedRef.current) return;
+    const saved = lastSavedRef.current;
+    if (saved && saved.tables === diagram.tables && saved.rels === diagram.relationships) return;
     const t = setTimeout(() => {
-      saveDiagram(diagram);
-      lastSavedRef.current = sig;
+      // skipServerWhenLive: when the websocket is connected + synced the sync server already
+      // persists this diagram, so we avoid a redundant whole-document REST PUT on every autosave.
+      saveDiagram(diagram, undefined, { skipServerWhenLive: true });
+      lastSavedRef.current = { tables: diagram.tables, rels: diagram.relationships };
     }, 800);
     return () => clearTimeout(t);
   }, [diagram]);

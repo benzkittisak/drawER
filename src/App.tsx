@@ -3,13 +3,19 @@
  * `?room=<id>`, so copying the address into another browser opens the SAME diagram (same Yjs
  * room) → live collaboration. Embed mode: `?embed=1&room=<id>` (read-only iframe viewer).
  */
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react';
 import { createDiagram, newId } from '@core';
 import { saveDiagram } from '@store';
-import { Dashboard } from '@views/Dashboard';
-import { Editor } from '@views/Editor';
-import { EmbedMissingRoom, EmbedView } from '@views/Embed';
-import { History } from '@views/History';
+
+// Views are code-split: the Dashboard-first load no longer pulls the Editor (Canvas, SVG layers,
+// every modal) or History up front — each becomes its own async chunk, fetched on first navigation.
+const Dashboard = lazy(() => import('@views/Dashboard').then((m) => ({ default: m.Dashboard })));
+const Editor = lazy(() => import('@views/Editor').then((m) => ({ default: m.Editor })));
+const History = lazy(() => import('@views/History').then((m) => ({ default: m.History })));
+const EmbedView = lazy(() => import('@views/Embed').then((m) => ({ default: m.EmbedView })));
+const EmbedMissingRoom = lazy(() =>
+  import('@views/Embed').then((m) => ({ default: m.EmbedMissingRoom })),
+);
 
 type Route = 'dashboard' | 'editor' | 'history';
 
@@ -49,11 +55,6 @@ export function App() {
     return () => window.removeEventListener('popstate', onPop);
   }, []);
 
-  if (INITIAL_EMBED) {
-    const room = INITIAL_ROOM;
-    return room ? <EmbedView diagramId={room} /> : <EmbedMissingRoom />;
-  }
-
   const open = (id: string) => {
     setOpenId(id);
     setJoinId(null);
@@ -74,9 +75,13 @@ export function App() {
     open(d.id);
   };
 
-  if (route === 'history') return <History onBack={() => setRoute('editor')} />;
-  if (route === 'editor' && openId) {
-    return (
+  let page: ReactNode;
+  if (INITIAL_EMBED) {
+    page = INITIAL_ROOM ? <EmbedView diagramId={INITIAL_ROOM} /> : <EmbedMissingRoom />;
+  } else if (route === 'history') {
+    page = <History onBack={() => setRoute('editor')} />;
+  } else if (route === 'editor' && openId) {
+    page = (
       <Editor
         key={openId}
         diagramId={openId}
@@ -85,6 +90,10 @@ export function App() {
         onHistory={() => setRoute('history')}
       />
     );
+  } else {
+    page = <Dashboard key={libraryEpoch} onOpen={open} onNew={newDiagram} />;
   }
-  return <Dashboard key={libraryEpoch} onOpen={open} onNew={newDiagram} />;
+
+  // Lazy views suspend while their chunk loads; the .app shell keeps the background stable (no flash).
+  return <Suspense fallback={<div className="app" />}>{page}</Suspense>;
 }

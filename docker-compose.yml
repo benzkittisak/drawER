@@ -15,6 +15,18 @@
 services:
   db:
     image: postgres:16-alpine
+    # Tuned for modest hardware (sized to fit the mem_limit below). shared_buffers ≈ 25% of the
+    # limit; effective_cache_size is only a planner hint for OS cache, not an allocation.
+    command:
+      - postgres
+      - -c
+      - shared_buffers=256MB
+      - -c
+      - effective_cache_size=768MB
+      - -c
+      - work_mem=16MB
+      - -c
+      - maintenance_work_mem=64MB
     environment:
       POSTGRES_USER: drawer
       POSTGRES_PASSWORD: drawer
@@ -26,6 +38,8 @@ services:
       interval: 5s
       timeout: 5s
       retries: 8
+    mem_limit: 1g
+    cpus: 1.0
     restart: unless-stopped
 
   sync:
@@ -53,6 +67,14 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://localhost:1234/healthz || exit 1']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    mem_limit: 512m
+    cpus: 1.0
     restart: unless-stopped
 
   web:
@@ -64,7 +86,16 @@ services:
     ports:
       - '9901:80'
     depends_on:
-      - sync
+      sync:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://localhost/ >/dev/null 2>&1 || exit 1']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    mem_limit: 128m
+    cpus: 0.5
     restart: unless-stopped
 
 volumes:

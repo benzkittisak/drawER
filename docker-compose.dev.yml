@@ -33,9 +33,9 @@ services:
       dockerfile: Dockerfile.dev
     # Re-install when package.json / bun.lock change — the anonymous node_modules volume can be stale after new deps.
     command: >
-      sh -c "exec npx nodemon --legacy-watch
+      sh -c "exec bunx nodemon --legacy-watch
       --watch server --watch package.json --watch bun.lock
-      --exec 'sh -c \"bun install --frozen-lockfile && node server/sync/server.cjs\"'"
+      --exec 'sh -c \"bun install --frozen-lockfile --ignore-scripts && bun server/sync/server.cjs\"'"
     environment:
       PORT: '1234'
       DATABASE_URL: postgres://drawer:drawer@db:5432/drawer
@@ -58,7 +58,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.dev
-    command: sh -c "bun install --frozen-lockfile && exec bun run dev -- --host --port 5173"
+    # --ignore-scripts: web only needs Vite/React deps; skip better-sqlite3/oracledb native
+    # rebuilds (no python in this image) so new packages (e.g. @fontsource) still install into the
+    # anonymous node_modules volume when package.json changes.
+    command: sh -c "bun install --frozen-lockfile --ignore-scripts && exec bun run dev -- --host --port 5173"
     environment:
       CHOKIDAR_USEPOLLING: 'true'
       VITE_SYNC_URL: ws://localhost:1234

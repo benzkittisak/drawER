@@ -3,7 +3,7 @@
  * library index that backs the Dashboard. The server PostgreSQL DB is the cross-device
  * source of truth for the library list and Yjs document bytes (via sync + REST push).
  */
-import { encodeDiagramState, loadDiagramFromIndexedDB } from '@collab';
+import { encodeDiagramState, loadDiagramFromIndexedDB, session } from '@collab';
 import { parse, serializeToString, type Diagram } from '@core';
 
 const LIBRARY_KEY = 'drawer:library';
@@ -272,7 +272,11 @@ export async function renameDiagramInLibrary(id: string, rawName: string): Promi
   }
 }
 
-export function saveDiagram(diagram: Diagram, at: number = Date.now()): void {
+export function saveDiagram(
+  diagram: Diagram,
+  at: number = Date.now(),
+  opts?: { skipServerWhenLive?: boolean },
+): void {
   try {
     localStorage.setItem(diagramKey(diagram.id), serializeToString(diagram, new Date(at).toISOString()));
   } catch {
@@ -280,6 +284,10 @@ export function saveDiagram(diagram: Diagram, at: number = Date.now()): void {
   }
   const summary = summaryFromDiagram(diagram, at);
   writeLibrary([summary, ...listDiagrams().filter((s) => s.id !== diagram.id)]);
+  // During a live, synced session the sync server already persists this diagram (data + metadata),
+  // so the autosave's REST PUT is redundant. The localStorage + library writes above still run
+  // (offline cache + instant dashboard). Offline / not-yet-synced / other diagrams still push.
+  if (opts?.skipServerWhenLive && session.isServerPersisting(diagram.id)) return;
   void pushDiagramToServer(diagram, summary);
 }
 
