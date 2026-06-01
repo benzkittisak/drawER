@@ -3,11 +3,11 @@
  * Uses the clean-room importers; surfaces parser warnings.
  */
 import { useState } from 'react';
-import { dbmlToDiagram, DIALECT_LABELS, DIALECTS, importSql, type DialectId } from '@core';
+import { dbmlToDiagram, DIALECT_LABELS, DIALECTS, importSql, parse, type DialectId } from '@core';
 import { useEditorActions } from '@store';
 import { Btn, Modal } from '@ui/atoms';
 
-type Source = 'sql' | 'dbml';
+type Source = 'sql' | 'dbml' | 'json';
 
 export function ImportModal({ onClose }: { onClose: () => void }) {
   const { loadDiagram } = useEditorActions();
@@ -18,6 +18,15 @@ export function ImportModal({ onClose }: { onClose: () => void }) {
 
   const run = () => {
     if (!text.trim()) return;
+    if (source === 'json') {
+      try {
+        loadDiagram(parse(text));
+        onClose();
+      } catch (e) {
+        setWarnings([e instanceof Error ? e.message : String(e)]);
+      }
+      return;
+    }
     const res = source === 'sql' ? importSql(text, dialect) : dbmlToDiagram(text, dialect);
     if (res.diagram.tables.length === 0) {
       setWarnings(res.warnings.length ? res.warnings : ['No tables found in input.']);
@@ -53,6 +62,9 @@ export function ImportModal({ onClose }: { onClose: () => void }) {
         </button>
         <button className={source === 'dbml' ? 'active' : ''} onClick={() => setSource('dbml')}>
           DBML
+        </button>
+        <button className={source === 'json' ? 'active' : ''} onClick={() => setSource('json')}>
+          JSON
         </button>
       </div>
       {source === 'sql' && (

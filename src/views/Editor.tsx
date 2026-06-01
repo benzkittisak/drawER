@@ -3,10 +3,10 @@
  * @store (seeded once on mount); collab chrome (people/comments/activity) is still seed data
  * until M5/M6. The composition does not change when the store moves onto Yjs.
  */
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import * as seed from '@data/seed';
 import { seedDiagram } from '@data/seedDiagram';
-import { useEditorActions } from '@store';
+import { loadDiagram as loadFromStorage, saveDiagram, useDiagram, useEditorActions } from '@store';
 import type { DemoComment } from '@data/types';
 import { Canvas, type NewCommentDraft } from '@canvas/Canvas';
 import { TopBar } from './panels/TopBar';
@@ -21,18 +21,27 @@ import { ImportModal } from './panels/ImportModal';
 const SETTINGS = { motion: true, grid: true, pins: true };
 
 interface EditorProps {
+  diagramId: string;
   onDashboard: () => void;
   onHistory: () => void;
 }
 
-export function Editor({ onDashboard, onHistory }: EditorProps) {
-  const { loadDiagram } = useEditorActions();
-  const loaded = useRef(false);
-  if (!loaded.current) {
-    // Seed the store synchronously on first render so the canvas has content immediately.
-    loadDiagram(seedDiagram());
-    loaded.current = true;
+export function Editor({ diagramId, onDashboard, onHistory }: EditorProps) {
+  const { loadDiagram: loadIntoStore } = useEditorActions();
+  const diagram = useDiagram();
+
+  // Load the requested diagram into the store synchronously on first render (or when it changes).
+  const loadedId = useRef<string | null>(null);
+  if (loadedId.current !== diagramId) {
+    loadIntoStore(loadFromStorage(diagramId) ?? seedDiagram());
+    loadedId.current = diagramId;
   }
+
+  // Autosave (debounced) to the local library.
+  useEffect(() => {
+    const t = setTimeout(() => saveDiagram(diagram), 800);
+    return () => clearTimeout(t);
+  }, [diagram]);
 
   const [leftOpen, setLeftOpen] = useState(true);
   const [rightOpen, setRightOpen] = useState(true);

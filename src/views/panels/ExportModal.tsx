@@ -10,18 +10,20 @@ import {
   DIALECT_LABELS,
   DIALECTS,
   exportSql,
+  serializeToString,
   type DialectId,
 } from '@core';
 import { useDiagram } from '@store';
 import { Icon } from '@ui/Icon';
 import { Btn, Modal } from '@ui/atoms';
 
-type Format = 'sql' | 'dbml' | 'mermaid' | 'markdown';
+type Format = 'sql' | 'dbml' | 'mermaid' | 'markdown' | 'json';
 const FORMATS: { id: Format; label: string; ext: string }[] = [
   { id: 'sql', label: 'SQL', ext: 'sql' },
   { id: 'dbml', label: 'DBML', ext: 'dbml' },
   { id: 'mermaid', label: 'Mermaid', ext: 'mmd' },
   { id: 'markdown', label: 'Markdown', ext: 'md' },
+  { id: 'json', label: 'JSON', ext: 'drawdb.json' },
 ];
 
 export function ExportModal({ onClose }: { onClose: () => void }) {
@@ -40,6 +42,8 @@ export function ExportModal({ onClose }: { onClose: () => void }) {
         return diagramToMermaid(diagram);
       case 'markdown':
         return diagramToMarkdown(diagram);
+      case 'json':
+        return serializeToString(diagram);
     }
   }, [diagram, format, dialect]);
 

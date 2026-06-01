@@ -21,3 +21,9 @@ export { diagramToDbml } from './dbml/export';
 export { diagramToMermaid } from './mermaid/export';
 export { diagramToMarkdown } from './markdown/export';
 export { autoLayout } from './layout/autoLayout';
+
+// JSON interchange (native save format)
+export { serialize, serializeToString, parse } from './serialize/json';
+export { CURRENT_VERSION, APP_TAG } from './serialize/schema';
+export type { SavedDiagram } from './serialize/schema';
+export { migrate } from './serialize/migrate';
