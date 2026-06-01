@@ -23,3 +23,8 @@ coverage/
 
 # vite
 .vite/
+
+# server database (local sqlite)
+server/sync/*.sqlite
+server/sync/*.sqlite-journal
+server/sync/*.sqlite-wal

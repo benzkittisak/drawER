@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "@dbml/core": "^8.2.4",
+    "@hocuspocus/server": "^4.1.0",
     "dagre": "^0.8.5",
     "node-sql-parser": "^5.4.0",
     "react": "^19.0.0",
