@@ -8,10 +8,20 @@ rebuild of drawdb — see "Locked decisions" below.
 > from `docs/tasks/`.** Everything you need to start is in those three places.
 
 ## Status
-- **M0 complete:** Vite + React 19 + TS scaffold, design system, the three views
-  (Dashboard → Editor → History) ported as an interactive but **non-collaborative** demo on
-  seed data. Build / typecheck / lint / boundary checks are green.
-- **Next:** M1 (real domain model + canvas store). See `docs/tasks/`.
+- **M0–M7 implemented.** The app is a working real-time collaborative ER editor:
+  - **Core engine** (`src/core`): domain model + type catalogs; SQL export for 6 dialects
+    (dialect-strategy, golden-tested); SQL import (node-sql-parser) + DBML import/export +
+    Mermaid/Markdown; versioned JSON interchange (schema-validated, lossless round-trip).
+  - **Editor**: store-bound canvas (drag, FK-link, add/delete), Export/Import dialogs.
+  - **Collaboration** (`src/collab`): Yjs doc + y-indexeddb + y-websocket, **live cursors +
+    presence + advisory locks** (Awareness), `Y.UndoManager`, Share/join-by-link, pinned
+    comments, activity feed, local version history (snapshots/diffs/restore).
+  - **Local-first**: IndexedDB + a Dashboard library; works offline, syncs when shared.
+  - Heavy parsers (node-sql-parser / @dbml/core) are **lazy-loaded** (dynamic import).
+  - `typecheck` / `lint` / `depcruise` / `test` (38) / `build` all green.
+- **Deferred (M7 / future):** accounts + server-persisted team workspace, roles/permissions,
+  cross-diagram presence; self-hosted fonts (currently Google Fonts @import); i18n.
+- Verify live collaboration: `npm run sync`, then open the same diagram in two windows and Share.
 
 ## Locked decisions (do not re-litigate — see `docs/adr/`)
 1. **From scratch**, including our own SQL engine.
@@ -29,6 +39,7 @@ npm run typecheck   # tsc --noEmit
 npm run lint        # ESLint
 npm run depcruise   # module import-boundary check (must pass)
 npm run format      # Prettier
+npm run sync        # optional Yjs websocket server (ws://localhost:1234) for live collaboration
 ```
 Before committing, the change must pass: `typecheck`, `lint`, `depcruise`, `test`, `build`.
 

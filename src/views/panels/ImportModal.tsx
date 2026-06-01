@@ -16,7 +16,7 @@ export function ImportModal({ onClose }: { onClose: () => void }) {
   const [text, setText] = useState('');
   const [warnings, setWarnings] = useState<string[]>([]);
 
-  const run = () => {
+  const run = async () => {
     if (!text.trim()) return;
     if (source === 'json') {
       try {
@@ -27,7 +27,7 @@ export function ImportModal({ onClose }: { onClose: () => void }) {
       }
       return;
     }
-    const res = source === 'sql' ? importSql(text, dialect) : dbmlToDiagram(text, dialect);
+    const res = source === 'sql' ? await importSql(text, dialect) : await dbmlToDiagram(text, dialect);
     if (res.diagram.tables.length === 0) {
       setWarnings(res.warnings.length ? res.warnings : ['No tables found in input.']);
       return;

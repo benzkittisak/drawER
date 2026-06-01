@@ -2,7 +2,6 @@
  * DBML importer (DBML → our model) via @dbml/core (Apache-2.0). Defensive: parse failures
  * become warnings, not throws. Maps tables, fields, enums, and refs (with cardinality).
  */
-import { Parser } from '@dbml/core';
 import { autoLayout } from '../layout/autoLayout';
 import { createDiagram, createEnum, createField, createRelationship, createTable } from '../model/factory';
 import { newId } from '../id';
@@ -76,10 +75,11 @@ function cardinalityOf(a: DbmlEndpoint, b: DbmlEndpoint): { child: DbmlEndpoint;
   return { child, parent, card: 'many_to_one' };
 }
 
-export function dbmlToDiagram(dbml: string, dialect: DialectId = 'postgres'): DbmlImportResult {
+export async function dbmlToDiagram(dbml: string, dialect: DialectId = 'postgres'): Promise<DbmlImportResult> {
   const warnings: string[] = [];
   let db: DbmlDatabase;
   try {
+    const { Parser } = await import('@dbml/core');
     db = Parser.parse(dbml, 'dbml') as unknown as DbmlDatabase;
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -140,5 +140,5 @@ export function dbmlToDiagram(dbml: string, dialect: DialectId = 'postgres'): Db
     );
   }
 
-  return { diagram: autoLayout(d), warnings };
+  return { diagram: await autoLayout(d), warnings };
 }

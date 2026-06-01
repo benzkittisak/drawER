@@ -10,6 +10,7 @@ import { listDiagrams, type DiagramSummary } from '@store';
 import { DIALECT_LABELS, type DialectId } from '@core';
 import { Icon } from '@ui/Icon';
 import { Avatar, Btn } from '@ui/atoms';
+import { CreditsModal } from './panels/CreditsModal';
 
 function relativeTime(ms: number): string {
   const s = Math.max(0, Math.floor((Date.now() - ms) / 1000));
@@ -83,6 +84,7 @@ interface DashboardProps {
 
 export function Dashboard({ onOpen, onNew }: DashboardProps) {
   const [q, setQ] = useState('');
+  const [creditsOpen, setCreditsOpen] = useState(false);
   // listDiagrams() reads localStorage synchronously; recompute on each render (cheap).
   const all = listDiagrams();
   const shown = useMemo(
@@ -107,7 +109,7 @@ export function Dashboard({ onOpen, onNew }: DashboardProps) {
         </div>
         <div className="spacer" />
         <Btn variant="ghost" iconOnly icon="bell" title="Notifications" />
-        <Btn variant="ghost" iconOnly icon="settings" title="Settings" />
+        <Btn variant="ghost" iconOnly icon="settings" title="About & credits" onClick={() => setCreditsOpen(true)} />
         <Avatar user={seed.users.you} size={30} ring />
       </div>
 
@@ -137,6 +139,7 @@ export function Dashboard({ onOpen, onNew }: DashboardProps) {
           </div>
         </div>
       </div>
+      {creditsOpen && <CreditsModal onClose={() => setCreditsOpen(false)} />}
     </div>
   );
 }

@@ -20,8 +20,8 @@ CREATE TABLE \`users\` (
 `;
 
 describe('SQL import', () => {
-  it('parses tables, columns, keys, and a foreign key', () => {
-    const { diagram, warnings } = importSql(MYSQL_SCHEMA, 'mysql');
+  it('parses tables, columns, keys, and a foreign key', async () => {
+    const { diagram, warnings } = await importSql(MYSQL_SCHEMA, 'mysql');
     expect(warnings).toEqual([]);
     expect(diagram.tables.map((t) => t.name).sort()).toEqual(['orgs', 'users']);
 
@@ -42,16 +42,16 @@ describe('SQL import', () => {
     expect(rel.toTableId).toBe(orgs.id);
   });
 
-  it('auto-layout assigns distinct positions', () => {
-    const { diagram } = importSql(MYSQL_SCHEMA, 'mysql');
+  it('auto-layout assigns distinct positions', async () => {
+    const { diagram } = await importSql(MYSQL_SCHEMA, 'mysql');
     const [a, b] = diagram.tables;
     expect(a.position).not.toEqual(b.position);
   });
 
-  it('round-trips structure through export → import (mysql, inline FKs)', () => {
+  it('round-trips structure through export → import (mysql, inline FKs)', async () => {
     const sample = buildSampleDiagram();
     const sql = exportSql(sample, 'mysql', { inlineForeignKeys: true });
-    const { diagram } = importSql(sql, 'mysql');
+    const { diagram } = await importSql(sql, 'mysql');
     expect(diagram.tables.map((t) => t.name).sort()).toEqual(['organizations', 'users']);
     expect(diagram.relationships).toHaveLength(1);
   });

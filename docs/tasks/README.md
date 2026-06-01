@@ -31,7 +31,12 @@ Bullet list that must all be true to call this done.
 Commands to run / what to observe.
 ```
 
-## Index (current)
+## Status
+**M0–M7 are implemented** (see `CLAUDE.md`). The tickets below remain as the record of scope and
+acceptance criteria. Remaining/deferred work: accounts + server-persisted team workspace,
+roles/permissions, cross-diagram presence (M7 backend), self-hosted fonts, i18n.
+
+## Index (delivered)
 | ID | Title | Milestone | Depends |
 |----|-------|-----------|---------|
 | M1-01 | Core domain model + factories + type catalogs | M1 | — |

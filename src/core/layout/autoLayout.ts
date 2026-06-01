@@ -3,7 +3,6 @@
  * Pure & deterministic (dagre gives stable output for the same input). Node dimensions are
  * duplicated here (not imported from the canvas) to keep core framework-independent.
  */
-import dagre from 'dagre';
 import type { Diagram, Table } from '../model/types';
 
 const NODE_W = 234;
@@ -13,7 +12,8 @@ const FIELD = 33;
 
 const tableHeight = (t: Table): number => STRIP + HEAD + t.fields.length * FIELD;
 
-export function autoLayout(diagram: Diagram): Diagram {
+export async function autoLayout(diagram: Diagram): Promise<Diagram> {
+  const dagre = (await import('dagre')).default;
   const g = new dagre.graphlib.Graph();
   g.setGraph({ rankdir: 'LR', nodesep: 60, ranksep: 90, marginx: 40, marginy: 40 });
   g.setDefaultEdgeLabel(() => ({}));

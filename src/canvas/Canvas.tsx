@@ -23,6 +23,7 @@ import {
   useSelection,
   useTables,
   useTool,
+  useUndoRedo,
 } from '@store';
 import type { DemoUser, LiveUser } from '@data/types';
 import { Icon, type IconName } from '@ui/Icon';
@@ -75,6 +76,7 @@ export function Canvas({
   const [selected, setSelected] = useSelection();
   const [tool, setTool] = useTool();
   const actions = useEditorActions();
+  const { undo, redo } = useUndoRedo();
   const presence = useCanvasPresence();
   const live = usePresence();
 
@@ -233,7 +235,7 @@ export function Canvas({
     });
   const fitView = () => setCam({ x: 60, y: 30, z: 0.92 });
 
-  const addTableAtCenter = () => {
+  const addTableAtCenter = useCallback(() => {
     const r = wrapRef.current!.getBoundingClientRect();
     const p = toCanvas(r.left + r.width / 2, r.top + r.height / 2);
     const id = newId();
@@ -245,7 +247,44 @@ export function Canvas({
       }),
     );
     setSelected(id);
-  };
+  }, [toCanvas, actions, setSelected]);
+
+  // Keyboard shortcuts: tools (V/H/C/T) and undo/redo (mod+Z / mod+shift+Z / mod+Y).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return;
+      const mod = e.ctrlKey || e.metaKey;
+      if (mod && (e.key === 'z' || e.key === 'Z')) {
+        e.preventDefault();
+        if (e.shiftKey) redo();
+        else undo();
+        return;
+      }
+      if (mod && (e.key === 'y' || e.key === 'Y')) {
+        e.preventDefault();
+        redo();
+        return;
+      }
+      if (mod) return;
+      switch (e.key.toLowerCase()) {
+        case 'v':
+          setTool('select');
+          break;
+        case 'h':
+          setTool('pan');
+          break;
+        case 'c':
+          setTool('comment');
+          break;
+        case 't':
+          addTableAtCenter();
+          break;
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [undo, redo, setTool, addTableAtCenter]);
 
   const primaryTools: [IconName, Tool, string][] = [
     ['cursor', 'select', 'Select / move  V'],

@@ -4,7 +4,6 @@
  * becomes a warning rather than a failure. Coverage is strongest for MySQL/Postgres/SQLite;
  * Oracle falls back to the Postgres grammar (flagged).
  */
-import { Parser } from 'node-sql-parser';
 import { autoLayout } from '../../layout/autoLayout';
 import { createDiagram, createField, createRelationship, createTable } from '../../model/factory';
 import { newId } from '../../id';
@@ -181,12 +180,13 @@ function buildDiagram(schema: NeutralSchema, dialect: DialectId): Diagram {
   return d;
 }
 
-export function importSql(sql: string, dialect: DialectId): ImportResult {
+export async function importSql(sql: string, dialect: DialectId): Promise<ImportResult> {
   const warnings: string[] = [];
   if (dialect === 'oracle') warnings.push('Oracle import is best-effort (parsed with the Postgres grammar).');
 
   let statements: CreateStmt[] = [];
   try {
+    const { Parser } = await import('node-sql-parser');
     const parser = new Parser();
     const ast = parser.astify(sql, { database: DB_OPTION[dialect] });
     statements = (Array.isArray(ast) ? ast : [ast]) as unknown as CreateStmt[];
@@ -208,6 +208,6 @@ export function importSql(sql: string, dialect: DialectId): ImportResult {
   }
 
   const schema: NeutralSchema = { tables, warnings };
-  const diagram = autoLayout(buildDiagram(schema, dialect));
+  const diagram = await autoLayout(buildDiagram(schema, dialect));
   return { diagram, warnings: schema.warnings };
 }

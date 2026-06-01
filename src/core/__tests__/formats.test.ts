@@ -28,13 +28,13 @@ describe('Markdown export', () => {
 });
 
 describe('DBML round-trip', () => {
-  it('exports DBML and re-imports the same structure', () => {
+  it('exports DBML and re-imports the same structure', async () => {
     const dbml = diagramToDbml(d);
     expect(dbml).toContain('Table users {');
     expect(dbml).toContain('Enum user_role {');
     expect(dbml).toMatch(/Ref .*: users\.org_id > organizations\.id/);
 
-    const { diagram, warnings } = dbmlToDiagram(dbml);
+    const { diagram, warnings } = await dbmlToDiagram(dbml);
     expect(warnings).toEqual([]);
     expect(diagram.tables.map((t) => t.name).sort()).toEqual(['organizations', 'users']);
     expect(diagram.relationships).toHaveLength(1);
