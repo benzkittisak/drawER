@@ -25,7 +25,7 @@ rebuild of drawdb — see "Locked decisions" below.
   - `typecheck` / `lint` / `depcruise` / `test` (38) / `build` all green.
 - **Deferred (M7 / future):** accounts + server-persisted team workspace, roles/permissions,
   cross-diagram presence; self-hosted fonts (currently Google Fonts @import); i18n.
-- Verify live collaboration: `npm run sync`, then open the same diagram in two windows and Share.
+- Verify live collaboration: `bun run sync`, then open the same diagram in two windows and Share.
 
 ## Locked decisions (do not re-litigate — see `docs/adr/`)
 1. **From scratch**, including our own SQL engine.
@@ -35,15 +35,16 @@ rebuild of drawdb — see "Locked decisions" below.
 4. **Local-first** (IndexedDB) with **optional** room sync. No mandatory backend / accounts yet.
 
 ## Commands
+Package manager is **Bun** (lockfile `bun.lock`). The sync server runs on **Node** (`node:sqlite`).
 ```bash
-npm run dev         # Vite dev server (http://localhost:5173)
-npm run build       # tsc -b && vite build
-npm test            # Vitest (unit + golden-file SQL tests)
-npm run typecheck   # tsc --noEmit
-npm run lint        # ESLint
-npm run depcruise   # module import-boundary check (must pass)
-npm run format      # Prettier
-npm run sync        # Yjs websocket server + SQLite database (ws+http on :1234) — diagram storage
+bun install         # install dependencies
+bun run dev         # Vite dev server (http://localhost:5173)
+bun run build       # tsc -b && vite build
+bun run test        # Vitest (unit + golden-file SQL tests)  — NOT `bun test` (that's Bun's runner)
+bun run typecheck   # tsc --noEmit
+bun run lint        # ESLint
+bun run depcruise   # module import-boundary check (must pass)
+bun run sync        # Yjs websocket server + SQLite database (ws+http on :1234) — diagram storage
 ```
 Before committing, the change must pass: `typecheck`, `lint`, `depcruise`, `test`, `build`.
 
