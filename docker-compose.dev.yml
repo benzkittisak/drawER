@@ -1,6 +1,7 @@
 # drawDB Live — DEVELOPMENT stack with hot reload.
+#   db   : PostgreSQL 16
 #   web  : Vite dev server (HMR) on :5173
-#   sync : Yjs server + SQLite, auto-restarted by nodemon, on :1234
+#   sync : Yjs server + Postgres, auto-restarted by nodemon, on :1234
 #
 # Usage:   docker compose -f docker-compose.dev.yml up --build     then open http://localhost:5173
 #
@@ -8,32 +9,54 @@
 # anonymous volume so the host's (Windows) modules don't shadow the container's (Linux) ones.
 # Polling is enabled because Docker bind mounts on Windows/WSL don't emit native fs events.
 services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: drawer
+      POSTGRES_PASSWORD: drawer
+      POSTGRES_DB: drawer
+    # Host tools (pgAdmin, DBeaver): localhost:5433 — sync uses db:5432 inside the network.
+    ports:
+      - '5433:5432'
+    volumes:
+      - drawer-dev-pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U drawer -d drawer']
+      interval: 5s
+      timeout: 5s
+      retries: 8
+    restart: unless-stopped
+
   sync:
     build:
       context: .
       dockerfile: Dockerfile.dev
-    command: npx nodemon --legacy-watch --watch server server/sync/server.cjs
+    # Re-install when package.json changes — the anonymous node_modules volume can be stale after new deps (e.g. pg).
+    command: sh -c "bun install --frozen-lockfile && exec npx nodemon --legacy-watch --watch server server/sync/server.cjs"
     environment:
       PORT: '1234'
-      DB_PATH: /data/drawer.sqlite
+      DATABASE_URL: postgres://drawer:drawer@db:5432/drawer
+      # Optional: enable canvas "Generate with AI" (POST /api/ai/generate-schema)
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
     ports:
       - '1234:1234'
     volumes:
       - .:/app
       - /app/node_modules
-      - drawer-dev-data:/data
+    depends_on:
+      db:
+        condition: service_healthy
     restart: unless-stopped
 
   web:
     build:
       context: .
       dockerfile: Dockerfile.dev
-    command: bun run dev -- --host --port 5173
+    command: sh -c "bun install --frozen-lockfile && exec bun run dev -- --host --port 5173"
     environment:
-      # Make Vite's file watcher poll the bind mount (reliable HMR on Windows/WSL).
       CHOKIDAR_USEPOLLING: 'true'
-      # Browser reaches the sync server via the published host port.
       VITE_SYNC_URL: ws://localhost:1234
+      SYNC_PROXY_TARGET: http://sync:1234
     ports:
       - '5173:5173'
     volumes:
@@ -44,4 +67,4 @@ services:
     restart: unless-stopped
 
 volumes:
-  drawer-dev-data:
+  drawer-dev-pg:

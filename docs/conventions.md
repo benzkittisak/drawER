@@ -6,7 +6,7 @@ fails `lint`, `typecheck`, or `depcruise`, not just review.
 ## Tooling
 - **Bun** is the package manager (lockfile `bun.lock`; commit it, never `package-lock.json`).
   Run scripts with `bun run <script>`. Use `bun run test` (Vitest), not `bun test` (Bun's runner).
-- The sync server runs on **Node** (it uses `node:sqlite`); local dev needs both Bun and Node.
+- The sync server runs on **Node** + **PostgreSQL** (`pg`); use Docker Compose or a local Postgres on `:5432`.
 
 ## Language & style
 - **TypeScript `strict`**, no `any` (`@typescript-eslint/no-explicit-any` is an error). Prefer
@@ -49,7 +49,7 @@ This is what lets several agents work in `core`, `canvas`, and `views` at the sa
 
 ## Git / PRs
 - Small, focused commits with imperative subjects (`Add Postgres dialect export`).
-- A change must pass `typecheck`, `lint`, `depcruise`, `test`, and `build` before commit.
+- A change must pass `bun run typecheck`, `bun run lint`, `bun run depcruise`, `bun run test`, and `bun run build` before commit.
 - Reference the ticket id from `docs/tasks/` in the commit/PR (e.g. `M2-01`).
 - Co-author trailer for AI-authored commits per repo policy.
 

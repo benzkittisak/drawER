@@ -28,4 +28,4 @@ Production polish and the deferred backend that unlocks the design's team featur
 - (If backend done) login + cloud diagrams + enforced roles; Dashboard shows real team + live status.
 
 ## How to verify
-`npm run build`; manual pass over each item; for backend, an end-to-end auth + share + permission test.
+`bun run build`; manual pass over each item; for backend, an end-to-end auth + share + permission test.

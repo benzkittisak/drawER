@@ -34,4 +34,4 @@ export function useConnection(): { status: 'local'|'connecting'|'connected'; isS
 - UI still imports no `yjs` (depcruise green).
 
 ## How to verify
-Run `server/sync`; `npm run dev`; open two windows with the same room; edit concurrently; reload; go offline→online.
+Run `server/sync`; `bun run dev`; open two windows with the same room; edit concurrently; reload; go offline→online.

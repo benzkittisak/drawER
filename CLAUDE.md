@@ -16,8 +16,8 @@ rebuild of drawdb — see "Locked decisions" below.
   - **Collaboration** (`src/collab`): Yjs doc + y-indexeddb + y-websocket, **live cursors +
     presence + advisory locks** (Awareness), `Y.UndoManager`, Share/join-by-link, pinned
     comments, activity feed, local version history (snapshots/diffs/restore).
-  - **Server database**: `npm run sync` runs a Yjs websocket server that persists every diagram
-    to a real **SQLite** DB (Node's built-in `node:sqlite`, no native deps) and serves
+  - **Server database**: `bun run sync` runs a Yjs websocket server that persists every diagram
+    to **PostgreSQL** (via `pg`; Docker Compose runs Postgres automatically) and serves
     `GET /api/diagrams`. Clients connect on every open, so data lives server-side and is
     cross-device; IndexedDB is the offline cache. No auth (open by id/link). Dashboard lists from
     the DB (falls back to local when offline).
@@ -35,7 +35,7 @@ rebuild of drawdb — see "Locked decisions" below.
 4. **Local-first** (IndexedDB) with **optional** room sync. No mandatory backend / accounts yet.
 
 ## Commands
-Package manager is **Bun** (lockfile `bun.lock`). The sync server runs on **Node** (`node:sqlite`).
+Package manager is **Bun** (lockfile `bun.lock`). The sync server runs on **Node** + **PostgreSQL**.
 ```bash
 bun install         # install dependencies
 bun run dev         # Vite dev server (http://localhost:5173)
@@ -44,9 +44,10 @@ bun run test        # Vitest (unit + golden-file SQL tests)  — NOT `bun test` 
 bun run typecheck   # tsc --noEmit
 bun run lint        # ESLint
 bun run depcruise   # module import-boundary check (must pass)
-bun run sync        # Yjs websocket server + SQLite database (ws+http on :1234) — diagram storage
+bun run format      # Prettier
+bun run sync        # Yjs websocket server + Postgres (ws+http on :1234) — diagram storage
 ```
-Before committing, the change must pass: `typecheck`, `lint`, `depcruise`, `test`, `build`.
+Before committing, the change must pass: `bun run typecheck`, `bun run lint`, `bun run depcruise`, `bun run test`, `bun run build`.
 
 ## Module map (src/)
 | Module | Role | May import |

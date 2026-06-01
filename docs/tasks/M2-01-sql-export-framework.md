@@ -46,4 +46,4 @@ export function exportSql(d: Diagram, dialect: DialectId, opts?: ExportOptions):
 - `src/core/sql` stays pure (depcruise/lint green).
 
 ## How to verify
-`npm test` (golden tests). `npm run typecheck && npm run depcruise`.
+`bun run test` (golden tests). `bun run typecheck && bun run depcruise`.

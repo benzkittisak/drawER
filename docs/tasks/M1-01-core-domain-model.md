@@ -38,4 +38,4 @@ export const CATALOGS: Record<DialectId, Record<string, TypeDef>>;
 - Unit tests cover factories + guards.
 
 ## How to verify
-`npm run typecheck && npm run depcruise && npm test`
+`bun run typecheck && bun run depcruise && bun run test`

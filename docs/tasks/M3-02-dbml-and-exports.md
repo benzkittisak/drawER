@@ -29,4 +29,4 @@ export function diagramToMarkdown(d: Diagram): string;
 - `@dbml/core` confirmed Apache-2.0; no copyleft transitive deps; depcruise/lint green.
 
 ## How to verify
-`npm test`; export a sample diagram to each format and eyeball.
+`bun run test`; export a sample diagram to each format and eyeball.

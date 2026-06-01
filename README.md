@@ -12,7 +12,7 @@ syncs when you share a room.
 docker compose -f docker-compose.dev.yml up --build   # open http://localhost:5173
 ```
 - **web** — Vite dev server with HMR (`:5173`); edits to `src/` reload instantly.
-- **sync** — Yjs server + SQLite, auto-restarted by nodemon on changes (`:1234`).
+- **db** + **sync** — PostgreSQL + Yjs server, auto-restarted by nodemon on changes (`:1234`).
 - Source is bind-mounted; `node_modules` stays in the container. File watching uses polling so
   HMR works through Docker bind mounts on Windows/WSL.
 
@@ -21,7 +21,7 @@ docker compose -f docker-compose.dev.yml up --build   # open http://localhost:51
 docker compose up --build      # web on http://localhost:9901, sync+DB on :1234
 ```
 - **web** — the built SPA served by nginx (`:9901`).
-- **sync** — Yjs websocket server + SQLite database, stored on a persistent volume (`drawer-data`).
+- **db** + **sync** — PostgreSQL (`drawer-pg` volume) + Yjs websocket server (`:1234`).
 
 Open http://localhost:9901 in two browsers, create/open a diagram, then **copy the URL**
 (`…?room=<id>`) into the other browser to collaborate live (cursors + presence). The TopBar shows
@@ -29,19 +29,26 @@ Open http://localhost:9901 in two browsers, create/open a diagram, then **copy t
 `--build-arg VITE_SYNC_URL=wss://your-host` and publish the sync server there.
 
 ## Run locally (dev)
-Uses **Bun** as the package manager (the sync server runs on Node for `node:sqlite`).
+Uses **Bun** as the package manager. The sync server runs on Node and needs PostgreSQL
+(`docker compose up db` or the full stack).
 ```bash
 bun install
-bun run sync     # Yjs server + SQLite database (ws+http on :1234)
-bun run dev      # http://localhost:5173
+docker compose up db -d   # optional: Postgres on localhost:5432
+bun run sync              # Yjs server + Postgres (ws+http on :1234)
+bun run dev               # http://localhost:5173
 ```
+
+Optional — **Generate with AI** on the canvas toolbar calls `POST /api/ai/generate-schema` on the
+sync server. Set `OPENAI_API_KEY` in the environment where `bun run sync` runs (or in
+`docker-compose` for the `sync` service). Optional: `OPENAI_MODEL` (default `gpt-4o-mini`),
+`OPENAI_BASE_URL` for OpenAI-compatible APIs.
 
 ## Scripts
 | Command | What |
 |---|---|
 | `bun install` | Install dependencies (lockfile: `bun.lock`) |
 | `bun run dev` | Vite dev server |
-| `bun run sync` | Yjs sync server + SQLite database (diagram storage) |
+| `bun run sync` | Yjs sync server + PostgreSQL (diagram storage) |
 | `bun run build` | Type-check + production build |
 | `bun test`* / `bun run test` | Unit + golden-file tests (Vitest) |
 | `bun run lint` / `typecheck` / `depcruise` | Quality gates |
@@ -51,7 +58,7 @@ bun run dev      # http://localhost:5173
 ## Status
 Real-time collaborative ER editor: domain model + SQL engine (6 dialects) + import/DBML/Mermaid/
 Markdown + versioned JSON; Yjs live collaboration (cursors, presence, comments, activity, version
-history); diagrams persisted in a server-side SQLite database (no auth). See `CLAUDE.md`.
+history); diagrams persisted in PostgreSQL via the sync server (no auth). See `CLAUDE.md`.
 
 ## Documentation
 - `CLAUDE.md` — orientation for contributors (incl. AI agents).

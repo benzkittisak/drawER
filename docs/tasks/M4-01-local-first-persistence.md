@@ -32,4 +32,4 @@ export function saveDiagram(d: Diagram): Promise<void>;
 - Works with no network (offline).
 
 ## How to verify
-`npm run dev` → edit, hard-reload, confirm persistence; toggle offline in devtools.
+`bun run dev` → edit, hard-reload, confirm persistence; toggle offline in devtools.

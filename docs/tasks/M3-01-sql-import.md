@@ -32,4 +32,4 @@ export function importSql(sql: string, dialect: DialectId): { diagram: Diagram; 
 - `node-sql-parser` confirmed Apache-2.0 in the dependency tree; depcruise/lint green.
 
 ## How to verify
-`npm test`; `npm run dev` → Import a sample SQL file and see tables appear.
+`bun run test`; `bun run dev` → Import a sample SQL file and see tables appear.

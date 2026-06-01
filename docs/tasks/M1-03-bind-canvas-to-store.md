@@ -34,5 +34,5 @@ No new external API; this wires existing UI to `@store` hooks from M1-02.
 - depcruise still green (no `yjs` import in UI).
 
 ## How to verify
-`npm run build && npm run dev` → drag tables, add a relationship via a field grip, rename in panel;
-confirm state stays consistent. `npm test`.
+`bun run build && bun run dev` → drag tables, add a relationship via a field grip, rename in panel;
+confirm state stays consistent. `bun run test`.

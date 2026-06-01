@@ -31,4 +31,4 @@ Each file: `export const <dialect>: Dialect = …` (no new external API beyond M
 - Editor "Export SQL" (wire a minimal dialog) shows output for the selected dialect.
 
 ## How to verify
-`npm test`. Spot-check generated DDL against each engine's docs.
+`bun run test`. Spot-check generated DDL against each engine's docs.
