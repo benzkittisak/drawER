@@ -7,24 +7,38 @@ syncs when you share a room.
 > Clean-room, commercial rebuild inspired by drawdb. Built with React 19 + Vite + TypeScript,
 > Yjs (CRDT) for real-time sync, and a custom canvas. No AGPL code.
 
-## Quick start
+## Run with Docker (full stack)
+```bash
+docker compose up --build      # web on http://localhost:8080, sync+DB on :1234
+```
+- **web** — the built SPA served by nginx (`:8080`).
+- **sync** — Yjs websocket server + SQLite database, stored on a persistent volume (`drawer-data`).
+
+Open http://localhost:8080 in two browsers, create/open a diagram, then **copy the URL**
+(`…?room=<id>`) into the other browser to collaborate live (cursors + presence). The TopBar shows
+**Live · synced** when connected. To deploy elsewhere, rebuild web with
+`--build-arg VITE_SYNC_URL=wss://your-host` and publish the sync server there.
+
+## Run locally (dev)
 ```bash
 npm install
+npm run sync     # Yjs server + SQLite database (ws+http on :1234)
 npm run dev      # http://localhost:5173
 ```
 
 ## Scripts
 | Command | What |
 |---|---|
-| `npm run dev` | Dev server |
+| `npm run dev` | Vite dev server |
+| `npm run sync` | Yjs sync server + SQLite database (diagram storage) |
 | `npm run build` | Type-check + production build |
 | `npm test` | Unit + golden-file tests (Vitest) |
 | `npm run lint` / `typecheck` / `depcruise` | Quality gates |
 
 ## Status
-Early foundation (milestone M0): the three views — **Dashboard → Editor → Version history** —
-render as an interactive demo on seed data. Real domain model, SQL engine, persistence, and live
-collaboration land in M1–M6.
+Real-time collaborative ER editor: domain model + SQL engine (6 dialects) + import/DBML/Mermaid/
+Markdown + versioned JSON; Yjs live collaboration (cursors, presence, comments, activity, version
+history); diagrams persisted in a server-side SQLite database (no auth). See `CLAUDE.md`.
 
 ## Documentation
 - `CLAUDE.md` — orientation for contributors (incl. AI agents).
