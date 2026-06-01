@@ -39,6 +39,7 @@ interface CanvasProps {
   pins?: boolean;
   onPlaceComment: (x: number, y: number) => void;
   onOpenComment: (id: string) => void;
+  onEditTable: (id: string) => void;
 }
 
 interface Camera {
@@ -53,7 +54,14 @@ type DragState =
   | { mode: 'link'; fromT: string; fromF: string }
   | null;
 
-export function Canvas({ draft, grid = true, pins = true, onPlaceComment, onOpenComment }: CanvasProps) {
+export function Canvas({
+  draft,
+  grid = true,
+  pins = true,
+  onPlaceComment,
+  onOpenComment,
+  onEditTable,
+}: CanvasProps) {
   const tables = useTables();
   const rels = useRelationships();
   const comments = useComments();
@@ -296,6 +304,7 @@ export function Canvas({ draft, grid = true, pins = true, onPlaceComment, onOpen
             onSelect={setSelected}
             onDragStart={onNodeDragStart}
             onGrip={onGrip}
+            onEdit={onEditTable}
           />
         ))}
 
