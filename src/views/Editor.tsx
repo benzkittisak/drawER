@@ -12,6 +12,7 @@ import {
   useConnection,
   useDiagram,
   useEditorActions,
+  useSelection,
 } from '@store';
 import { Canvas } from '@canvas/Canvas';
 import { TopBar } from './panels/TopBar';
@@ -21,8 +22,6 @@ import { CommentCard } from './panels/CommentCard';
 import { ShareModal } from './panels/ShareModal';
 import { ExportModal } from './panels/ExportModal';
 import { ImportModal } from './panels/ImportModal';
-import { TableEditorModal } from './panels/TableEditorModal';
-
 const SETTINGS = { grid: true, pins: true };
 
 interface EditorProps {
@@ -72,8 +71,12 @@ export function Editor({ diagramId, joinRoom = false, onDashboard, onHistory }: 
   const [importOpen, setImportOpen] = useState(false);
   const [draft, setDraft] = useState<{ x: number; y: number } | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
-  const [editTableId, setEditTableId] = useState<string | null>(null);
+  const [selected] = useSelection();
   const activeComment = comments.find((c) => c.id === openId) ?? null;
+
+  useEffect(() => {
+    if (selected) setRightOpen(true);
+  }, [selected]);
 
   const placeComment = (x: number, y: number) => {
     setOpenId(null);
@@ -110,13 +113,11 @@ export function Editor({ diagramId, joinRoom = false, onDashboard, onHistory }: 
           pins={SETTINGS.pins}
           onPlaceComment={placeComment}
           onOpenComment={openComment}
-          onEditTable={setEditTableId}
         />
         {rightOpen && <RightPanel onOpenComment={openComment} onShare={() => setShareOpen(true)} />}
         {(activeComment || draft) && (
           <CommentCard comment={activeComment} draft={draft} onClose={closeComment} />
         )}
-        {editTableId && <TableEditorModal tableId={editTableId} onClose={() => setEditTableId(null)} />}
         {shareOpen && <ShareModal onClose={() => setShareOpen(false)} />}
         {exportOpen && <ExportModal onClose={() => setExportOpen(false)} />}
         {importOpen && <ImportModal onClose={() => setImportOpen(false)} />}

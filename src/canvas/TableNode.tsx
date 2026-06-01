@@ -7,7 +7,6 @@
 import type { MouseEvent } from 'react';
 import type { Table } from '@core';
 import { Icon } from '@ui/Icon';
-import { Btn } from '@ui/atoms';
 import { NODE_W } from './geometry';
 
 export interface LockUser {
@@ -23,7 +22,6 @@ interface TableNodeProps {
   onSelect: (id: string) => void;
   onDragStart: (e: MouseEvent, id: string) => void;
   onGrip?: (e: MouseEvent, tableId: string, fieldId: string) => void;
-  onEdit?: (tableId: string) => void;
 }
 
 export function TableNode({
@@ -34,7 +32,6 @@ export function TableNode({
   onSelect,
   onDragStart,
   onGrip,
-  onEdit,
 }: TableNodeProps) {
   return (
     <div
@@ -63,27 +60,9 @@ export function TableNode({
             onSelect(table.id);
             onDragStart(e, table.id);
           }}
-          onDoubleClick={(e) => {
-            e.stopPropagation();
-            onEdit?.(table.id);
-          }}
         >
           <Icon name="table" size={15} className="node__icon" />
           <div className="node__name">{table.name}</div>
-          <div className="node__tools">
-            <Btn
-              iconOnly
-              sm
-              variant="ghost"
-              icon="edit"
-              title="Edit table"
-              onMouseDown={(e) => e.stopPropagation()}
-              onClick={(e) => {
-                e.stopPropagation();
-                onEdit?.(table.id);
-              }}
-            />
-          </div>
         </div>
         {table.fields.map((f) => {
           const fk = fkFieldIds.has(f.id);

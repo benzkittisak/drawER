@@ -39,7 +39,6 @@ interface CanvasProps {
   pins?: boolean;
   onPlaceComment: (x: number, y: number) => void;
   onOpenComment: (id: string) => void;
-  onEditTable: (id: string) => void;
 }
 
 interface Camera {
@@ -60,7 +59,6 @@ export function Canvas({
   pins = true,
   onPlaceComment,
   onOpenComment,
-  onEditTable,
 }: CanvasProps) {
   const tables = useTables();
   const rels = useRelationships();
@@ -304,7 +302,6 @@ export function Canvas({
             onSelect={setSelected}
             onDragStart={onNodeDragStart}
             onGrip={onGrip}
-            onEdit={onEditTable}
           />
         ))}
 

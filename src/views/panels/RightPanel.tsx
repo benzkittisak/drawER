@@ -1,11 +1,13 @@
 /**
- * RightPanel — collaboration: People / Comments / Activity, all real (presence + Yjs).
- * When not in a live session you're solo; share to see teammates.
+ * RightPanel — table editor (when a table is selected) + collaboration: People / Comments / Activity.
  */
-import { useState } from 'react';
-import { useActivity, useComments, useConnection, useIdentity, useOthers } from '@store';
+import { useEffect, useState } from 'react';
+import { useActivity, useComments, useConnection, useIdentity, useOthers, useSelection } from '@store';
 import { Icon } from '@ui/Icon';
 import { Avatar, Btn } from '@ui/atoms';
+import { TableEditorPanel } from './TableEditorPanel';
+
+type Tab = 'table' | 'people' | 'comments' | 'activity';
 
 const initials = (n: string): string =>
   n.split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase() || 'NA';
@@ -19,7 +21,8 @@ const relTime = (ts: number): string => {
 };
 
 export function RightPanel({ onOpenComment, onShare }: { onOpenComment: (id: string) => void; onShare: () => void }) {
-  const [tab, setTab] = useState<'people' | 'comments' | 'activity'>('people');
+  const [tab, setTab] = useState<Tab>('people');
+  const [selected, setSelected] = useSelection();
   const me = useIdentity();
   const others = useOthers();
   const comments = useComments();
@@ -27,9 +30,17 @@ export function RightPanel({ onOpenComment, onShare }: { onOpenComment: (id: str
   const { connection } = useConnection();
   const open = comments.filter((c) => !c.resolved);
 
+  useEffect(() => {
+    if (selected) setTab('table');
+  }, [selected]);
+
   return (
     <div className="panel panel--right">
       <div className="panel__tabs">
+        <button className={'ptab' + (tab === 'table' ? ' active' : '')} onClick={() => setTab('table')}>
+          <Icon name="table" size={15} />
+          Table
+        </button>
         <button className={'ptab' + (tab === 'people' ? ' active' : '')} onClick={() => setTab('people')}>
           <Icon name="users" size={15} />
           People
@@ -45,6 +56,18 @@ export function RightPanel({ onOpenComment, onShare }: { onOpenComment: (id: str
           Activity
         </button>
       </div>
+
+      {tab === 'table' && (
+        <div className="panel__body">
+          {selected ? (
+            <TableEditorPanel tableId={selected} onDeleted={() => setSelected(null)} />
+          ) : (
+            <div style={{ padding: '12px 4px', color: 'var(--ink-3)', fontSize: 13, lineHeight: 1.55 }}>
+              Click a table on the canvas to edit its name, color, and fields here.
+            </div>
+          )}
+        </div>
+      )}
 
       {tab === 'people' && (
         <div className="panel__body">
