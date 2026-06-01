@@ -14,6 +14,7 @@ interface TopBarProps {
   onShare: () => void;
   onHistory: () => void;
   onExport: () => void;
+  onImport: () => void;
   leftOpen: boolean;
   rightOpen: boolean;
   onToggleLeft: () => void;
@@ -30,6 +31,7 @@ export function TopBar({
   onShare,
   onHistory,
   onExport,
+  onImport,
   leftOpen,
   rightOpen,
   onToggleLeft,
@@ -67,7 +69,8 @@ export function TopBar({
         onClick={onToggleLeft}
         style={leftOpen ? activeToggle : undefined}
       />
-      <Btn iconOnly variant="ghost" icon="code" title="Export SQL" onClick={onExport} />
+      <Btn iconOnly variant="ghost" icon="folder" title="Import SQL / DBML" onClick={onImport} />
+      <Btn iconOnly variant="ghost" icon="code" title="Export" onClick={onExport} />
       <Btn iconOnly variant="ghost" icon="clock" title="Version history" onClick={onHistory} />
       <Btn
         iconOnly

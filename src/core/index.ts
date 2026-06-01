@@ -12,3 +12,12 @@ export { newId } from './id';
 // SQL export
 export { exportSql, getDialect, DIALECT_LABELS } from './sql/export';
 export type { ExportOptions, Dialect } from './sql/export';
+
+// import + other formats
+export { importSql } from './sql/import/parse';
+export type { ImportResult } from './sql/import/parse';
+export { dbmlToDiagram } from './dbml/import';
+export { diagramToDbml } from './dbml/export';
+export { diagramToMermaid } from './mermaid/export';
+export { diagramToMarkdown } from './markdown/export';
+export { autoLayout } from './layout/autoLayout';
