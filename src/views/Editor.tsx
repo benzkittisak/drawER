@@ -14,6 +14,7 @@ import { LeftPanel } from './panels/LeftPanel';
 import { RightPanel } from './panels/RightPanel';
 import { CommentCard } from './panels/CommentCard';
 import { ShareModal } from './panels/ShareModal';
+import { ExportModal } from './panels/ExportModal';
 
 // Until the Tweaks settings become real preferences (M7), the demo runs with everything on.
 const SETTINGS = { motion: true, grid: true, pins: true };
@@ -35,6 +36,7 @@ export function Editor({ onDashboard, onHistory }: EditorProps) {
   const [leftOpen, setLeftOpen] = useState(true);
   const [rightOpen, setRightOpen] = useState(true);
   const [shareOpen, setShareOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
   const [comments, setComments] = useState<DemoComment[]>(() => seed.comments.map((c) => ({ ...c })));
   const [activeComment, setActiveComment] = useState<DemoComment | null>(null);
 
@@ -74,6 +76,7 @@ export function Editor({ onDashboard, onHistory }: EditorProps) {
         onDashboard={onDashboard}
         onShare={() => setShareOpen(true)}
         onHistory={onHistory}
+        onExport={() => setExportOpen(true)}
         leftOpen={leftOpen}
         rightOpen={rightOpen}
         onToggleLeft={() => setLeftOpen((v) => !v)}
@@ -111,6 +114,7 @@ export function Editor({ onDashboard, onHistory }: EditorProps) {
           />
         )}
         {shareOpen && <ShareModal users={seed.users} onClose={() => setShareOpen(false)} />}
+        {exportOpen && <ExportModal onClose={() => setExportOpen(false)} />}
       </div>
     </div>
   );

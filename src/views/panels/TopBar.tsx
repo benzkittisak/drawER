@@ -13,6 +13,7 @@ interface TopBarProps {
   onDashboard: () => void;
   onShare: () => void;
   onHistory: () => void;
+  onExport: () => void;
   leftOpen: boolean;
   rightOpen: boolean;
   onToggleLeft: () => void;
@@ -28,6 +29,7 @@ export function TopBar({
   onDashboard,
   onShare,
   onHistory,
+  onExport,
   leftOpen,
   rightOpen,
   onToggleLeft,
@@ -65,7 +67,7 @@ export function TopBar({
         onClick={onToggleLeft}
         style={leftOpen ? activeToggle : undefined}
       />
-      <Btn iconOnly variant="ghost" icon="code" title="Export SQL" />
+      <Btn iconOnly variant="ghost" icon="code" title="Export SQL" onClick={onExport} />
       <Btn iconOnly variant="ghost" icon="clock" title="Version history" onClick={onHistory} />
       <Btn
         iconOnly
