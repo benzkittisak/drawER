@@ -1,8 +1,8 @@
 /**
  * Canvas — the interactive editor surface: pan/zoom, table drag, FK-grip linking, relationships,
  * comment pins, live cursors, floating dock + zoom pill. Reads/writes diagram state through
- * @store hooks (so the M5 Yjs swap is invisible here). Collab chrome (cursors/locks/comments)
- * still runs on seed props until M5/M6.
+ * @store hooks. All collaboration is real (Yjs Awareness): you're solo until you Share, then
+ * teammates' cursors/locks appear — no mock teammates.
  */
 import {
   useCallback,
@@ -25,22 +25,16 @@ import {
   useTool,
   useUndoRedo,
 } from '@store';
-import type { DemoUser, LiveUser } from '@data/types';
 import { Icon, type IconName } from '@ui/Icon';
 import { Btn } from '@ui/atoms';
 import { CommentPins } from './CommentPins';
-import { CursorsLayer } from './CursorsLayer';
 import { RemoteCursorsLayer } from './RemoteCursorsLayer';
 import { RelationshipLayer, type LinkingState } from './RelationshipLayer';
 import { TableNode, type LockUser } from './TableNode';
 import type { Tool } from '@store';
 
 interface CanvasProps {
-  users: Record<string, DemoUser>;
-  locks: Record<string, string>;
-  liveUsers: LiveUser[];
   draft: { x: number; y: number } | null;
-  motion: boolean;
   grid?: boolean;
   pins?: boolean;
   onPlaceComment: (x: number, y: number) => void;
@@ -59,17 +53,7 @@ type DragState =
   | { mode: 'link'; fromT: string; fromF: string }
   | null;
 
-export function Canvas({
-  users,
-  locks,
-  liveUsers,
-  draft,
-  motion,
-  grid = true,
-  pins = true,
-  onPlaceComment,
-  onOpenComment,
-}: CanvasProps) {
+export function Canvas({ draft, grid = true, pins = true, onPlaceComment, onOpenComment }: CanvasProps) {
   const tables = useTables();
   const rels = useRelationships();
   const comments = useComments();
@@ -83,12 +67,8 @@ export function Canvas({
   const wrapRef = useRef<HTMLDivElement>(null);
   const lastCursorSent = useRef(0);
 
-  // Resolved advisory lock for a table: real awareness when shared, else the seed demo user.
-  const lockFor = (tableId: string): LockUser | undefined => {
-    if (presence.isShared) return presence.locks[tableId];
-    const uid = locks[tableId];
-    return uid ? { name: users[uid].name, color: users[uid].color } : undefined;
-  };
+  // Advisory lock for a table — comes from real teammate presence (empty when solo).
+  const lockFor = (tableId: string): LockUser | undefined => presence.locks[tableId];
   const [cam, setCam] = useState<Camera>({ x: 60, y: 30, z: 0.92 });
   const drag = useRef<DragState>(null);
   const [hotRel, setHotRel] = useState<string | null>(null);
@@ -321,17 +301,13 @@ export function Canvas({
 
         {pins && <CommentPins comments={comments} draft={draft} onOpen={onOpenComment} />}
 
-        {presence.isShared ? (
-          <RemoteCursorsLayer />
-        ) : (
-          <CursorsLayer liveUsers={liveUsers} users={users} byId={byId} motion={motion} />
-        )}
+        <RemoteCursorsLayer />
       </div>
 
       <div className="canvas-hint">
         <span className="chip">
           <Icon name="users" size={13} />
-          {(presence.isShared ? presence.peers : liveUsers.length) + 1} here now
+          {presence.peers + 1} {presence.peers === 0 ? '· just you' : 'here now'}
         </span>
       </div>
 

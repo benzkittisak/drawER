@@ -1,11 +1,9 @@
 /**
- * Editor — composes TopBar + Left/Right panels + Canvas + overlays. Diagram state lives in
- * @store (seeded once on mount); collab chrome (people/comments/activity) is still seed data
- * until M5/M6. The composition does not change when the store moves onto Yjs.
+ * Editor — composes TopBar + Left/Right panels + Canvas + overlays. All state is real: the
+ * diagram comes from the local store (@store, loaded from IndexedDB/localStorage or created
+ * blank), and collaboration is live via Yjs. No mock teammates or seed content.
  */
 import { useEffect, useRef, useState } from 'react';
-import * as seed from '@data/seed';
-import { seedDiagram } from '@data/seedDiagram';
 import { createDiagram } from '@core';
 import {
   loadDiagram as loadFromStorage,
@@ -24,8 +22,7 @@ import { ShareModal } from './panels/ShareModal';
 import { ExportModal } from './panels/ExportModal';
 import { ImportModal } from './panels/ImportModal';
 
-// Until the Tweaks settings become real preferences (M7), the demo runs with everything on.
-const SETTINGS = { motion: true, grid: true, pins: true };
+const SETTINGS = { grid: true, pins: true };
 
 interface EditorProps {
   diagramId: string;
@@ -45,7 +42,8 @@ export function Editor({ diagramId, joinRoom = false, onDashboard, onHistory }: 
   const loadedId = useRef<string | null>(null);
   if (loadedId.current !== diagramId) {
     const local = loadFromStorage(diagramId);
-    const initial = local ?? (joinRoom ? createDiagram(diagramId, 'Shared diagram', 'postgres') : seedDiagram());
+    const initial =
+      local ?? createDiagram(diagramId, joinRoom ? 'Shared diagram' : 'Untitled diagram', 'postgres');
     loadIntoStore(initial);
     loadedId.current = diagramId;
   }
@@ -91,8 +89,6 @@ export function Editor({ diagramId, joinRoom = false, onDashboard, onHistory }: 
   return (
     <div className="app">
       <TopBar
-        users={seed.users}
-        liveUsers={seed.liveUsers}
         doc={diagram.name}
         onDashboard={onDashboard}
         onShare={() => setShareOpen(true)}
@@ -105,13 +101,9 @@ export function Editor({ diagramId, joinRoom = false, onDashboard, onHistory }: 
         onToggleRight={() => setRightOpen((v) => !v)}
       />
       <div className="work">
-        {leftOpen && <LeftPanel users={seed.users} locks={{}} />}
+        {leftOpen && <LeftPanel />}
         <Canvas
-          users={seed.users}
-          locks={seed.locks}
-          liveUsers={seed.liveUsers}
           draft={draft}
-          motion={SETTINGS.motion}
           grid={SETTINGS.grid}
           pins={SETTINGS.pins}
           onPlaceComment={placeComment}

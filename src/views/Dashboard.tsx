@@ -5,11 +5,17 @@
  * deferred to M7. This view is local-first: it lists what's stored in this browser.
  */
 import { useMemo, useState } from 'react';
-import * as seed from '@data/seed';
-import { listDiagrams, type DiagramSummary } from '@store';
+import { listDiagrams, useIdentity, type DiagramSummary } from '@store';
 import { DIALECT_LABELS, type DialectId } from '@core';
 import { Icon } from '@ui/Icon';
 import { Avatar, Btn } from '@ui/atoms';
+
+interface MeUser {
+  id: string;
+  name: string;
+  short: string;
+  color: string;
+}
 import { CreditsModal } from './panels/CreditsModal';
 
 function relativeTime(ms: number): string {
@@ -50,7 +56,7 @@ function Thumb({ colors }: { colors: string[] }) {
   );
 }
 
-function Card({ d, onOpen }: { d: DiagramSummary; onOpen: () => void }) {
+function Card({ d, me, onOpen }: { d: DiagramSummary; me: MeUser; onOpen: () => void }) {
   const dbLabel = DIALECT_LABELS[d.dialect as DialectId] ?? d.dialect;
   return (
     <div className="card" onClick={onOpen}>
@@ -69,7 +75,7 @@ function Card({ d, onOpen }: { d: DiagramSummary; onOpen: () => void }) {
             {relativeTime(d.updatedAt)}
           </div>
           <div className="presence">
-            <Avatar user={seed.users.you} size={22} />
+            <Avatar user={me} size={22} />
           </div>
         </div>
       </div>
@@ -85,6 +91,8 @@ interface DashboardProps {
 export function Dashboard({ onOpen, onNew }: DashboardProps) {
   const [q, setQ] = useState('');
   const [creditsOpen, setCreditsOpen] = useState(false);
+  const identity = useIdentity();
+  const me: MeUser = { id: identity.id, name: 'You', short: 'ME', color: identity.color };
   // listDiagrams() reads localStorage synchronously; recompute on each render (cheap).
   const all = listDiagrams();
   const shown = useMemo(
@@ -110,7 +118,7 @@ export function Dashboard({ onOpen, onNew }: DashboardProps) {
         <div className="spacer" />
         <Btn variant="ghost" iconOnly icon="bell" title="Notifications" />
         <Btn variant="ghost" iconOnly icon="settings" title="About & credits" onClick={() => setCreditsOpen(true)} />
-        <Avatar user={seed.users.you} size={30} ring />
+        <Avatar user={me} size={30} ring />
       </div>
 
       <div className="dash__wrap">
@@ -128,7 +136,7 @@ export function Dashboard({ onOpen, onNew }: DashboardProps) {
 
         <div className="grid">
           {shown.map((d) => (
-            <Card key={d.id} d={d} onOpen={() => onOpen(d.id)} />
+            <Card key={d.id} d={d} me={me} onOpen={() => onOpen(d.id)} />
           ))}
           <div className="card card--new" onClick={onNew}>
             <div style={{ textAlign: 'center' }}>

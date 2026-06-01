@@ -1,21 +1,16 @@
 /**
  * LeftPanel — Tables / Relations tabs with search + list. Reads diagram state from @store;
- * collab chrome (locks/users) is still seed until M5.
+ * advisory locks come from real teammate presence.
  */
 import { useState } from 'react';
 import { CARDINALITY_LABEL } from '@core';
-import { useRelationships, useSelection, useTables } from '@store';
-import type { DemoUser } from '@data/types';
+import { useCanvasPresence, useRelationships, useSelection, useTables } from '@store';
 import { Icon } from '@ui/Icon';
 
-interface LeftPanelProps {
-  users: Record<string, DemoUser>;
-  locks: Record<string, string>;
-}
-
-export function LeftPanel({ users, locks }: LeftPanelProps) {
+export function LeftPanel() {
   const tables = useTables();
   const rels = useRelationships();
+  const { locks } = useCanvasPresence();
   const [selected, setSelected] = useSelection();
   const [tab, setTab] = useState<'tables' | 'rels'>('tables');
   const [q, setQ] = useState('');
@@ -55,7 +50,7 @@ export function LeftPanel({ users, locks }: LeftPanelProps) {
                   <div className="tl__name">
                     {t.name}
                     {locks[t.id] && (
-                      <span className="tl__lock" title={users[locks[t.id]].name + ' editing'}>
+                      <span className="tl__lock" title={locks[t.id].name + ' editing'} style={{ color: locks[t.id].color }}>
                         <Icon name="lock" size={12} />
                       </span>
                     )}

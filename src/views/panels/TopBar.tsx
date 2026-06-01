@@ -1,14 +1,14 @@
 /**
- * TopBar — brand, breadcrumb, panel toggles, presence avatars, Share.
- * Ported from docs/design-reference/editor-panels.jsx.
+ * TopBar — brand, breadcrumb, panel toggles, real presence avatars, Share.
  */
-import type { DemoUser, LiveUser } from '@data/types';
+import { useIdentity, useOthers } from '@store';
 import { Icon } from '@ui/Icon';
 import { Avatar, Btn } from '@ui/atoms';
 
+const initials = (n: string): string =>
+  n.split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase() || 'NA';
+
 interface TopBarProps {
-  users: Record<string, DemoUser>;
-  liveUsers: LiveUser[];
   doc: string;
   onDashboard: () => void;
   onShare: () => void;
@@ -24,8 +24,6 @@ interface TopBarProps {
 const activeToggle = { color: 'var(--accent-strong)', background: 'var(--accent-soft)' };
 
 export function TopBar({
-  users,
-  liveUsers,
   doc,
   onDashboard,
   onShare,
@@ -37,7 +35,12 @@ export function TopBar({
   onToggleLeft,
   onToggleRight,
 }: TopBarProps) {
-  const online = [users.you, ...liveUsers.map((l) => users[l.id])];
+  const me = useIdentity();
+  const others = useOthers();
+  const online = [
+    { id: me.id, name: 'You', short: 'ME', color: me.color },
+    ...others.map((o) => ({ id: o.user.id, name: o.user.name, short: initials(o.user.name), color: o.user.color })),
+  ];
   return (
     <div className="topbar">
       <div className="brand" style={{ cursor: 'pointer' }} onClick={onDashboard} title="All diagrams">
