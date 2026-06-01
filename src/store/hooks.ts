@@ -2,6 +2,7 @@
  * Typed hooks — the UI's ONLY window into editor state. Components never touch the store
  * internals (or Yjs, in M5) directly. Selectors are granular to keep re-renders surgical.
  */
+import { useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import type { Diagram, Id, Relationship, Table } from '@core';
 import {
@@ -107,14 +108,18 @@ export interface RemoteCursorView {
 }
 
 /** Remote cursors (canvas coords). Isolated from useCanvasPresence so high-frequency cursor
- *  updates only re-render the cursor layer, not the whole canvas. */
+ *  updates only re-render the cursor layer, not the whole canvas.
+ *
+ *  NB: derive with useMemo from the stable `others` slice — a selector that builds a fresh
+ *  array/object every call breaks useSyncExternalStore's snapshot caching (infinite loop). */
 export function useRemoteCursors(): RemoteCursorView[] {
-  return useEditorStore(
-    useShallow((s) =>
-      s.others
+  const others = useEditorStore((s) => s.others);
+  return useMemo(
+    () =>
+      others
         .filter((o) => o.cursor)
         .map((o) => ({ id: o.clientId, name: o.user.name, color: o.user.color, x: o.cursor!.x, y: o.cursor!.y })),
-    ),
+    [others],
   );
 }
 
@@ -161,15 +166,15 @@ export function useVersions(): {
 }
 
 export function useCanvasPresence(): CanvasPresence {
-  return useEditorStore(
-    useShallow((s) => {
-      const locks: Record<string, { name: string; color: string }> = {};
-      for (const o of s.others) {
-        if (o.activity.type === 'editing' || o.activity.type === 'dragging') {
-          locks[o.activity.tableId] = { name: o.user.name, color: o.user.color };
-        }
+  const others = useEditorStore((s) => s.others);
+  const isShared = useEditorStore((s) => s.connection.isShared);
+  return useMemo(() => {
+    const locks: Record<string, { name: string; color: string }> = {};
+    for (const o of others) {
+      if (o.activity.type === 'editing' || o.activity.type === 'dragging') {
+        locks[o.activity.tableId] = { name: o.user.name, color: o.user.color };
       }
-      return { isShared: s.connection.isShared, peers: s.others.length, locks };
-    }),
-  );
+    }
+    return { isShared, peers: others.length, locks };
+  }, [others, isShared]);
 }
