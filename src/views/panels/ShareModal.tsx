@@ -1,11 +1,7 @@
 /**
- * ShareModal — start/stop a live collaboration session and share the join link.
- *
- * "Start live session" attaches the websocket provider to the current doc (the same offline
- * diagram becomes a shared room). Anyone who opens the link joins the same room and syncs.
- * Requires the sync server (`npm run sync`) or a configured VITE_SYNC_URL.
+ * ShareModal — copy the diagram link, embed iframe code, and manage the live session.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useConnection, useIdentity, useOthers } from '@store';
 import { Icon } from '@ui/Icon';
 import { Avatar, Btn, Modal } from '@ui/atoms';
@@ -13,23 +9,38 @@ import { Avatar, Btn, Modal } from '@ui/atoms';
 const initials = (n: string): string =>
   n.split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase() || 'NA';
 
+const EMBED_W = 960;
+const EMBED_H = 640;
+
 export function ShareModal({ onClose }: { onClose: () => void }) {
-  const { connection, shareRoom, leaveRoom } = useConnection();
+  const { connection, shareRoom, embedUrl, leaveRoom } = useConnection();
   const others = useOthers();
   const me = useIdentity();
   const [link, setLink] = useState('');
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState<'link' | 'embed' | null>(null);
+
+  const isLive = connection.status !== 'local';
+  const embedLink = embedUrl();
+  const embedCode = useMemo(
+    () =>
+      embedLink
+        ? `<iframe src="${embedLink}" width="${EMBED_W}" height="${EMBED_H}" style="border:0" loading="lazy" title="drawER diagram"></iframe>`
+        : '',
+    [embedLink],
+  );
 
   useEffect(() => {
-    if (connection.isShared) setLink(shareRoom());
-  }, [connection.isShared, shareRoom]);
+    if (isLive) setLink(shareRoom());
+  }, [isLive, shareRoom]);
 
-  const start = () => setLink(shareRoom());
-  const copy = async () => {
+  const reconnect = () => setLink(shareRoom());
+
+  const copyText = async (text: string, which: 'link' | 'embed') => {
+    if (!text) return;
     try {
-      await navigator.clipboard.writeText(link);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
+      await navigator.clipboard.writeText(text);
+      setCopied(which);
+      setTimeout(() => setCopied(null), 1500);
     } catch {
       /* clipboard unavailable */
     }
@@ -47,13 +58,13 @@ export function ShareModal({ onClose }: { onClose: () => void }) {
       title="Share diagram"
       onClose={onClose}
       foot={
-        connection.isShared ? (
+        isLive ? (
           <>
             <div className="link-box" style={{ flex: 1 }}>
               <Icon name="link" size={15} style={{ color: 'var(--ink-3)' }} />
               <code>{link}</code>
-              <Btn sm icon="copy" onClick={copy}>
-                {copied ? 'Copied!' : 'Copy'}
+              <Btn sm icon="copy" onClick={() => copyText(link, 'link')}>
+                {copied === 'link' ? 'Copied!' : 'Copy'}
               </Btn>
             </div>
             <Btn variant="primary" onClick={onClose}>
@@ -61,24 +72,24 @@ export function ShareModal({ onClose }: { onClose: () => void }) {
             </Btn>
           </>
         ) : (
-          <Btn variant="primary" icon="share" onClick={start} style={{ marginLeft: 'auto' }}>
-            Start live session
+          <Btn variant="primary" icon="share" onClick={reconnect} style={{ marginLeft: 'auto' }}>
+            Connect
           </Btn>
         )
       }
     >
-      {!connection.isShared && (
+      {!isLive && (
         <div style={{ fontSize: 13, color: 'var(--ink-2)', lineHeight: 1.6 }}>
-          Start a live session to edit this diagram with your team in real time — you'll see each
-          other's cursors and changes instantly. Share the generated link to invite people.
+          Not connected to the sync server — edits stay local until you connect. Teammates on the
+          same diagram appear automatically once you are online.
           <div style={{ marginTop: 8, fontSize: 11.5, color: 'var(--ink-3)' }}>
-            Needs a sync server: run <span style={{ fontFamily: 'var(--mono)' }}>npm run sync</span>{' '}
-            (or set <span style={{ fontFamily: 'var(--mono)' }}>VITE_SYNC_URL</span>).
+            Run <span style={{ fontFamily: 'var(--mono)' }}>bun run sync</span> (or Docker Compose)
+            and set <span style={{ fontFamily: 'var(--mono)' }}>VITE_SYNC_URL</span> if needed.
           </div>
         </div>
       )}
 
-      {connection.isShared && (
+      {isLive && (
         <>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
             <span
@@ -90,7 +101,7 @@ export function ShareModal({ onClose }: { onClose: () => void }) {
               Stop sharing
             </Btn>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginBottom: 16 }}>
             <div className="person" style={{ padding: '7px 4px' }}>
               <Avatar user={{ id: me.id, name: 'You', short: 'ME', color: me.color }} size={32} ring />
               <div className="person__main">
@@ -117,6 +128,17 @@ export function ShareModal({ onClose }: { onClose: () => void }) {
                 />
               </div>
             ))}
+          </div>
+
+          <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6, color: 'var(--ink-2)' }}>Embed on your site</div>
+          <p style={{ fontSize: 12, color: 'var(--ink-3)', lineHeight: 1.5, margin: '0 0 8px' }}>
+            Read-only viewer. Anyone with this link can view the diagram (same as the share link).
+          </p>
+          <div className="link-box link-box--stack">
+            <code style={{ fontSize: 11, whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{embedCode}</code>
+            <Btn sm icon="copy" onClick={() => copyText(embedCode, 'embed')} style={{ alignSelf: 'flex-end' }}>
+              {copied === 'embed' ? 'Copied!' : 'Copy embed code'}
+            </Btn>
           </div>
         </>
       )}

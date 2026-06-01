@@ -8,9 +8,11 @@ import type { Diagram, Table } from '../model/types';
 const NODE_W = 234;
 const STRIP = 7;
 const HEAD = 38;
+const HEAD_COMMENT = 22;
 const FIELD = 33;
 
-const tableHeight = (t: Table): number => STRIP + HEAD + t.fields.length * FIELD;
+const tableHeight = (t: Table): number =>
+  STRIP + HEAD + (t.comment?.trim() ? HEAD_COMMENT : 0) + t.fields.length * FIELD;
 
 export async function autoLayout(diagram: Diagram): Promise<Diagram> {
   const dagre = (await import('dagre')).default;

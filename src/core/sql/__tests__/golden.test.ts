@@ -1,6 +1,6 @@
 /**
  * Golden-file regression test: exportSql(sample, <dialect>) must match the committed
- * expected/<dialect>.sql. Regenerate intentional changes with:  UPDATE_GOLDENS=1 npm test
+ * expected/<dialect>.sql. Regenerate intentional changes with:  UPDATE_GOLDENS=1 bun run test
  * (then review the diff). Line endings are normalized so the comparison is OS-independent.
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -27,7 +27,7 @@ describe('golden DDL', () => {
         mkdirSync(DIR, { recursive: true });
         writeFileSync(file, sql);
       }
-      expect(existsSync(file), `missing golden ${file} — run UPDATE_GOLDENS=1 npm test`).toBe(true);
+      expect(existsSync(file), `missing golden ${file} — run UPDATE_GOLDENS=1 bun run test`).toBe(true);
       expect(lf(sql)).toBe(lf(readFileSync(file, 'utf8')));
     });
   }
