@@ -8,6 +8,9 @@ COPY . .
 # For local docker-compose the browser hits the published host port, so localhost:1234 is correct.
 ARG VITE_SYNC_URL=ws://localhost:1234
 ENV VITE_SYNC_URL=$VITE_SYNC_URL
+# Bundling @dbml/core (antlr4 grammars) is memory-heavy — raise Node's heap so the production
+# build doesn't hit the default ~2 GB limit and OOM inside the container.
+ENV NODE_OPTIONS=--max-old-space-size=4096
 RUN npm run build
 
 # --- serve static via nginx --------------------------------------------------
