@@ -4,7 +4,12 @@
  */
 import { useShallow } from 'zustand/react/shallow';
 import type { Diagram, Id, Relationship, Table } from '@core';
+import type { Activity, ConnectionState, PresenceUser, RemotePresence } from '@collab';
 import { useEditorStore, type Tool } from './store';
+
+export function useIdentity(): PresenceUser {
+  return useEditorStore((s) => s.identity);
+}
 
 export function useDiagram(): Diagram {
   return useEditorStore((s) => s.diagram);
@@ -55,5 +60,70 @@ export function useEditorActions() {
       addRelationship: s.addRelationship,
       deleteEntity: s.deleteEntity,
     })),
+  );
+}
+
+export function useConnection(): { connection: ConnectionState; shareRoom: () => string; leaveRoom: () => void } {
+  return useEditorStore(
+    useShallow((s) => ({ connection: s.connection, shareRoom: s.shareRoom, leaveRoom: s.leaveRoom })),
+  );
+}
+
+export function useOthers(): RemotePresence[] {
+  return useEditorStore((s) => s.others);
+}
+
+export function usePresence(): {
+  setCursor: (p: { x: number; y: number } | null) => void;
+  setSelection: (ids: string[]) => void;
+  setActivity: (a: Activity) => void;
+} {
+  return useEditorStore(
+    useShallow((s) => ({ setCursor: s.setCursor, setSelection: s.setSelectionPresence, setActivity: s.setActivity })),
+  );
+}
+
+export function useUndoRedo(): { undo: () => void; redo: () => void } {
+  return useEditorStore(useShallow((s) => ({ undo: s.undo, redo: s.redo })));
+}
+
+export interface RemoteCursorView {
+  id: number;
+  name: string;
+  color: string;
+  x: number;
+  y: number;
+}
+
+/** Remote cursors (canvas coords). Isolated from useCanvasPresence so high-frequency cursor
+ *  updates only re-render the cursor layer, not the whole canvas. */
+export function useRemoteCursors(): RemoteCursorView[] {
+  return useEditorStore(
+    useShallow((s) =>
+      s.others
+        .filter((o) => o.cursor)
+        .map((o) => ({ id: o.clientId, name: o.user.name, color: o.user.color, x: o.cursor!.x, y: o.cursor!.y })),
+    ),
+  );
+}
+
+export interface CanvasPresence {
+  isShared: boolean;
+  peers: number;
+  /** tableId → the presence user currently editing it (advisory lock). */
+  locks: Record<string, { name: string; color: string }>;
+}
+
+export function useCanvasPresence(): CanvasPresence {
+  return useEditorStore(
+    useShallow((s) => {
+      const locks: Record<string, { name: string; color: string }> = {};
+      for (const o of s.others) {
+        if (o.activity.type === 'editing' || o.activity.type === 'dragging') {
+          locks[o.activity.tableId] = { name: o.user.name, color: o.user.color };
+        }
+      }
+      return { isShared: s.connection.isShared, peers: s.others.length, locks };
+    }),
   );
 }

@@ -1,16 +1,25 @@
 /**
- * Editor store — the single source of truth for diagram + editor UI state, exposed to the UI
- * exclusively through the hooks in ./hooks.ts.
+ * Editor store — the single source of truth for editor state, exposed to the UI exclusively
+ * through the hooks in ./hooks.ts.
  *
- * M1: backed by plain in-memory state (a core `Diagram`). M5 reimplements these same actions
- * over Yjs (`@collab`) WITHOUT changing the action signatures or the hooks — so the canvas and
- * panels never change. `moveTable` (live, high-frequency) and `commitDrag` (once on drag-end)
- * are kept distinct precisely so M5 can route the former to awareness and the latter to a Yjs
- * transaction.
+ * Backed by the Yjs document (@collab): write actions run as Yjs transactions and the session
+ * pushes a derived `Diagram` snapshot back into this store; the hook API is unchanged from M1.
+ * `moveTable` is optimistic+local (high-frequency drag, no doc write); `commitDrag` writes the
+ * final position once as a transaction. Presence (cursors/selection/activity) flows through the
+ * session's awareness and lands in `others`.
  */
 import { create } from 'zustand';
 import type { Diagram, Field, Id, Relationship, Table } from '@core';
 import { createDiagram } from '@core';
+import {
+  getLocalIdentity,
+  mut,
+  session,
+  type Activity,
+  type ConnectionState,
+  type PresenceUser,
+  type RemotePresence,
+} from '@collab';
 
 export type Tool = 'select' | 'pan' | 'rel' | 'comment' | 'note';
 
@@ -18,120 +27,93 @@ export interface EditorState {
   diagram: Diagram;
   selected: Id | null;
   tool: Tool;
+  connection: ConnectionState;
+  others: RemotePresence[];
+  identity: PresenceUser;
 
   // editor ui
   setSelected: (id: Id | null) => void;
   setTool: (t: Tool) => void;
 
-  // diagram-level
+  // diagram lifecycle (open a diagram's Yjs doc)
   loadDiagram: (d: Diagram) => void;
-  renameDiagram: (name: string) => void;
 
-  // tables
+  // diagram mutations
+  renameDiagram: (name: string) => void;
   addTable: (table: Table) => void;
   updateTable: (id: Id, patch: Partial<Omit<Table, 'id' | 'fields' | 'indices'>>) => void;
   moveTable: (id: Id, x: number, y: number) => void;
   commitDrag: (id: Id, x: number, y: number) => void;
-
-  // fields
   addField: (tableId: Id, field: Field) => void;
   updateField: (tableId: Id, fieldId: Id, patch: Partial<Omit<Field, 'id'>>) => void;
   removeField: (tableId: Id, fieldId: Id) => void;
   reorderField: (tableId: Id, fieldId: Id, toIndex: number) => void;
-
-  // relationships
   addRelationship: (rel: Relationship) => void;
-
-  // generic delete (table or relationship)
   deleteEntity: (id: Id) => void;
+
+  // collaboration
+  shareRoom: () => string;
+  leaveRoom: () => void;
+  undo: () => void;
+  redo: () => void;
+
+  // presence
+  setCursor: (p: { x: number; y: number } | null) => void;
+  setSelectionPresence: (ids: string[]) => void;
+  setActivity: (a: Activity) => void;
 }
 
 const EMPTY = createDiagram('untitled', 'Untitled diagram', 'postgres');
+const IDENTITY = getLocalIdentity();
 
-const mapTables = (d: Diagram, id: Id, fn: (t: Table) => Table): Diagram => ({
-  ...d,
-  tables: d.tables.map((t) => (t.id === id ? fn(t) : t)),
-});
-
-export const useEditorStore = create<EditorState>((set) => ({
+export const useEditorStore = create<EditorState>((set, get) => ({
   diagram: EMPTY,
   selected: null,
   tool: 'select',
+  connection: { status: 'local', isShared: false, roomId: null },
+  others: [],
+  identity: IDENTITY,
 
   setSelected: (id) => set({ selected: id }),
   setTool: (t) => set({ tool: t }),
 
-  loadDiagram: (d) => set({ diagram: d, selected: null }),
-  renameDiagram: (name) => set((s) => ({ diagram: { ...s.diagram, name } })),
+  loadDiagram: (d) => {
+    set({ diagram: d, selected: null });
+    void session.open(d, (snap) => set({ diagram: snap }));
+  },
 
-  addTable: (table) => set((s) => ({ diagram: { ...s.diagram, tables: [...s.diagram.tables, table] } })),
+  renameDiagram: (name) => session.transact((m) => mut.renameDiagram(m, name)),
+  addTable: (table) => session.transact((m) => mut.addTable(m, table)),
+  updateTable: (id, patch) => session.transact((m) => mut.updateTable(m, id, patch)),
 
-  updateTable: (id, patch) => set((s) => ({ diagram: mapTables(s.diagram, id, (t) => ({ ...t, ...patch })) })),
-
+  // optimistic, local-only during drag (no doc write); peers see the awareness 'dragging' activity
   moveTable: (id, x, y) =>
-    set((s) => ({ diagram: mapTables(s.diagram, id, (t) => ({ ...t, position: { x, y } })) })),
-
-  // In M1 identical to moveTable; in M5 this is the one that commits a Yjs transaction.
-  commitDrag: (id, x, y) =>
-    set((s) => ({ diagram: mapTables(s.diagram, id, (t) => ({ ...t, position: { x, y } })) })),
-
-  addField: (tableId, field) =>
-    set((s) => ({ diagram: mapTables(s.diagram, tableId, (t) => ({ ...t, fields: [...t.fields, field] })) })),
-
-  updateField: (tableId, fieldId, patch) =>
     set((s) => ({
-      diagram: mapTables(s.diagram, tableId, (t) => ({
-        ...t,
-        fields: t.fields.map((f) => (f.id === fieldId ? { ...f, ...patch } : f)),
-      })),
+      diagram: { ...s.diagram, tables: s.diagram.tables.map((t) => (t.id === id ? { ...t, position: { x, y } } : t)) },
     })),
+  commitDrag: (id, x, y) => session.transact((m) => mut.setTablePosition(m, id, x, y)),
 
-  removeField: (tableId, fieldId) =>
-    set((s) => ({
-      diagram: {
-        ...mapTables(s.diagram, tableId, (t) => ({
-          ...t,
-          fields: t.fields.filter((f) => f.id !== fieldId),
-        })),
-        relationships: s.diagram.relationships.filter(
-          (r) => r.fromFieldId !== fieldId && r.toFieldId !== fieldId,
-        ),
-      },
-    })),
+  addField: (tableId, field) => session.transact((m) => mut.addField(m, tableId, field)),
+  updateField: (tableId, fieldId, patch) => session.transact((m) => mut.updateField(m, tableId, fieldId, patch)),
+  removeField: (tableId, fieldId) => session.transact((m) => mut.removeField(m, tableId, fieldId)),
+  reorderField: (tableId, fieldId, toIndex) => session.transact((m) => mut.reorderField(m, tableId, fieldId, toIndex)),
+  addRelationship: (rel) => session.transact((m) => mut.addRelationship(m, rel)),
+  deleteEntity: (id) => {
+    if (get().selected === id) set({ selected: null });
+    session.transact((m) => mut.deleteEntity(m, id));
+  },
 
-  reorderField: (tableId, fieldId, toIndex) =>
-    set((s) => ({
-      diagram: mapTables(s.diagram, tableId, (t) => {
-        const from = t.fields.findIndex((f) => f.id === fieldId);
-        if (from < 0) return t;
-        const fields = t.fields.slice();
-        const [moved] = fields.splice(from, 1);
-        fields.splice(Math.max(0, Math.min(fields.length, toIndex)), 0, moved);
-        return { ...t, fields };
-      }),
-    })),
+  shareRoom: () => session.shareRoom(),
+  leaveRoom: () => session.leaveRoom(),
+  undo: () => session.undo(),
+  redo: () => session.redo(),
 
-  addRelationship: (rel) =>
-    set((s) => ({ diagram: { ...s.diagram, relationships: [...s.diagram.relationships, rel] } })),
-
-  deleteEntity: (id) =>
-    set((s) => {
-      const isTable = s.diagram.tables.some((t) => t.id === id);
-      if (isTable) {
-        return {
-          selected: s.selected === id ? null : s.selected,
-          diagram: {
-            ...s.diagram,
-            tables: s.diagram.tables.filter((t) => t.id !== id),
-            relationships: s.diagram.relationships.filter(
-              (r) => r.fromTableId !== id && r.toTableId !== id,
-            ),
-          },
-        };
-      }
-      return {
-        selected: s.selected === id ? null : s.selected,
-        diagram: { ...s.diagram, relationships: s.diagram.relationships.filter((r) => r.id !== id) },
-      };
-    }),
+  setCursor: (p) => session.setCursor(p),
+  setSelectionPresence: (ids) => session.setSelection(ids),
+  setActivity: (a) => session.setActivity(a),
 }));
+
+// Wire session → store (connection + presence). Identity is set once for this browser.
+session.setIdentity(IDENTITY);
+session.onConnectionChange((c) => useEditorStore.setState({ connection: c }));
+session.onOthersChange((others) => useEditorStore.setState({ others }));

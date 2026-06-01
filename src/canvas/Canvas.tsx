@@ -14,14 +14,23 @@ import {
   type WheelEvent,
 } from 'react';
 import { createRelationship, createField, createTable, newId } from '@core';
-import { useEditorActions, useRelationships, useSelection, useTables, useTool } from '@store';
+import {
+  useCanvasPresence,
+  useEditorActions,
+  usePresence,
+  useRelationships,
+  useSelection,
+  useTables,
+  useTool,
+} from '@store';
 import type { DemoComment, DemoUser, LiveUser } from '@data/types';
 import { Icon, type IconName } from '@ui/Icon';
 import { Btn } from '@ui/atoms';
 import { CommentPins } from './CommentPins';
 import { CursorsLayer } from './CursorsLayer';
+import { RemoteCursorsLayer } from './RemoteCursorsLayer';
 import { RelationshipLayer, type LinkingState } from './RelationshipLayer';
-import { TableNode } from './TableNode';
+import { TableNode, type LockUser } from './TableNode';
 import type { Tool } from '@store';
 
 export interface NewCommentDraft {
@@ -68,8 +77,18 @@ export function Canvas({
   const [selected, setSelected] = useSelection();
   const [tool, setTool] = useTool();
   const actions = useEditorActions();
+  const presence = useCanvasPresence();
+  const live = usePresence();
 
   const wrapRef = useRef<HTMLDivElement>(null);
+  const lastCursorSent = useRef(0);
+
+  // Resolved advisory lock for a table: real awareness when shared, else the seed demo user.
+  const lockFor = (tableId: string): LockUser | undefined => {
+    if (presence.isShared) return presence.locks[tableId];
+    const uid = locks[tableId];
+    return uid ? { name: users[uid].name, color: users[uid].color } : undefined;
+  };
   const [cam, setCam] = useState<Camera>({ x: 60, y: 30, z: 0.92 });
   const drag = useRef<DragState>(null);
   const [hotRel, setHotRel] = useState<string | null>(null);
@@ -171,6 +190,25 @@ export function Canvas({
     return () => window.removeEventListener('keydown', onKey);
   }, [selected, actions]);
 
+  // Broadcast the selected table as presence → others see an advisory "editing" lock on it.
+  useEffect(() => {
+    if (!presence.isShared) return;
+    live.setSelection(selected ? [selected] : []);
+    live.setActivity(selected ? { type: 'editing', tableId: selected } : { type: 'idle' });
+  }, [selected, presence.isShared, live]);
+
+  // Throttled cursor broadcast (canvas coords) while sharing.
+  const onPointerMove = (e: MouseEvent) => {
+    if (!presence.isShared) return;
+    const now = performance.now();
+    if (now - lastCursorSent.current < 40) return;
+    lastCursorSent.current = now;
+    live.setCursor(toCanvas(e.clientX, e.clientY));
+  };
+  const onPointerLeave = () => {
+    if (presence.isShared) live.setCursor(null);
+  };
+
   const onWheel = (e: WheelEvent) => {
     if (e.ctrlKey || e.metaKey) {
       const r = wrapRef.current!.getBoundingClientRect();
@@ -221,6 +259,8 @@ export function Canvas({
       className="canvas-wrap"
       ref={wrapRef}
       onWheel={onWheel}
+      onMouseMove={onPointerMove}
+      onMouseLeave={onPointerLeave}
       style={{ cursor: tool === 'comment' ? 'crosshair' : 'default' }}
     >
       {grid && <div className="canvas-grid" />}
@@ -233,10 +273,9 @@ export function Canvas({
           <TableNode
             key={t.id}
             table={t}
-            users={users}
             fkFieldIds={fkFieldIds}
             selected={selected === t.id}
-            lockedBy={locks[t.id]}
+            lockedBy={lockFor(t.id)}
             onSelect={setSelected}
             onDragStart={onNodeDragStart}
             onGrip={onGrip}
@@ -245,13 +284,17 @@ export function Canvas({
 
         {pins && <CommentPins comments={comments} onOpen={onOpenComment} />}
 
-        <CursorsLayer liveUsers={liveUsers} users={users} byId={byId} motion={motion} />
+        {presence.isShared ? (
+          <RemoteCursorsLayer />
+        ) : (
+          <CursorsLayer liveUsers={liveUsers} users={users} byId={byId} motion={motion} />
+        )}
       </div>
 
       <div className="canvas-hint">
         <span className="chip">
           <Icon name="users" size={13} />
-          {liveUsers.length + 1} here now
+          {(presence.isShared ? presence.peers : liveUsers.length) + 1} here now
         </span>
       </div>
 

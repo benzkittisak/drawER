@@ -12,9 +12,12 @@ import { History } from '@views/History';
 
 type Route = 'dashboard' | 'editor' | 'history';
 
+const ROOM_PARAM =
+  typeof location !== 'undefined' ? new URLSearchParams(location.search).get('room') : null;
+
 export function App() {
-  const [route, setRoute] = useState<Route>('dashboard');
-  const [openId, setOpenId] = useState<string | null>(null);
+  const [route, setRoute] = useState<Route>(ROOM_PARAM ? 'editor' : 'dashboard');
+  const [openId, setOpenId] = useState<string | null>(ROOM_PARAM);
 
   // Seed the demo diagram into the local library on first run so the app isn't empty.
   const seeded = useRef(false);
@@ -36,9 +39,11 @@ export function App() {
 
   if (route === 'dashboard') return <Dashboard onOpen={open} onNew={newDiagram} />;
   if (route === 'history') return <History onBack={() => setRoute('editor')} />;
+  const editorId = openId ?? 'core-product-db';
   return (
     <Editor
-      diagramId={openId ?? 'core-product-db'}
+      diagramId={editorId}
+      joinRoom={!!ROOM_PARAM && editorId === ROOM_PARAM}
       onDashboard={() => setRoute('dashboard')}
       onHistory={() => setRoute('history')}
     />

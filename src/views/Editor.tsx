@@ -6,7 +6,14 @@
 import { useEffect, useRef, useState } from 'react';
 import * as seed from '@data/seed';
 import { seedDiagram } from '@data/seedDiagram';
-import { loadDiagram as loadFromStorage, saveDiagram, useDiagram, useEditorActions } from '@store';
+import { createDiagram } from '@core';
+import {
+  loadDiagram as loadFromStorage,
+  saveDiagram,
+  useConnection,
+  useDiagram,
+  useEditorActions,
+} from '@store';
 import type { DemoComment } from '@data/types';
 import { Canvas, type NewCommentDraft } from '@canvas/Canvas';
 import { TopBar } from './panels/TopBar';
@@ -22,20 +29,35 @@ const SETTINGS = { motion: true, grid: true, pins: true };
 
 interface EditorProps {
   diagramId: string;
+  /** Opened via a ?room=… share link — auto-join the live session. */
+  joinRoom?: boolean;
   onDashboard: () => void;
   onHistory: () => void;
 }
 
-export function Editor({ diagramId, onDashboard, onHistory }: EditorProps) {
+export function Editor({ diagramId, joinRoom = false, onDashboard, onHistory }: EditorProps) {
   const { loadDiagram: loadIntoStore } = useEditorActions();
+  const { shareRoom } = useConnection();
   const diagram = useDiagram();
 
   // Load the requested diagram into the store synchronously on first render (or when it changes).
+  // A joined room with no local copy starts empty and is filled by the websocket sync.
   const loadedId = useRef<string | null>(null);
   if (loadedId.current !== diagramId) {
-    loadIntoStore(loadFromStorage(diagramId) ?? seedDiagram());
+    const local = loadFromStorage(diagramId);
+    const initial = local ?? (joinRoom ? createDiagram(diagramId, 'Shared diagram', 'postgres') : seedDiagram());
+    loadIntoStore(initial);
     loadedId.current = diagramId;
   }
+
+  // Auto-join the live session when opened from a share link.
+  const joined = useRef(false);
+  useEffect(() => {
+    if (joinRoom && !joined.current) {
+      joined.current = true;
+      shareRoom();
+    }
+  }, [joinRoom, shareRoom]);
 
   // Autosave (debounced) to the local library.
   useEffect(() => {
@@ -83,7 +105,7 @@ export function Editor({ diagramId, onDashboard, onHistory }: EditorProps) {
       <TopBar
         users={seed.users}
         liveUsers={seed.liveUsers}
-        doc="Core Product DB"
+        doc={diagram.name}
         onDashboard={onDashboard}
         onShare={() => setShareOpen(true)}
         onHistory={onHistory}
@@ -125,7 +147,7 @@ export function Editor({ diagramId, onDashboard, onHistory }: EditorProps) {
             onResolve={resolveComment}
           />
         )}
-        {shareOpen && <ShareModal users={seed.users} onClose={() => setShareOpen(false)} />}
+        {shareOpen && <ShareModal onClose={() => setShareOpen(false)} />}
         {exportOpen && <ExportModal onClose={() => setExportOpen(false)} />}
         {importOpen && <ImportModal onClose={() => setImportOpen(false)} />}
       </div>

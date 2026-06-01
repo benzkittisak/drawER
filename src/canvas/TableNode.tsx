@@ -1,20 +1,24 @@
 /**
  * TableNode — a draggable ER table (strip + header + field rows), over the core model.
  * FK-ness is derived from relationships (a field that is the child side of any relationship),
- * passed in as `fkFieldIds`. Lock chrome is driven by the (still-mocked) collab `users`/`lockedBy`.
+ * passed in as `fkFieldIds`. `lockedBy` is the resolved presence user holding the table (real
+ * awareness when shared, or the seed demo user when local) — the node decouples from any store.
  */
 import type { MouseEvent } from 'react';
 import type { Table } from '@core';
-import type { DemoUser } from '@data/types';
 import { Icon } from '@ui/Icon';
 import { Btn } from '@ui/atoms';
 import { NODE_W } from './geometry';
 
+export interface LockUser {
+  name: string;
+  color: string;
+}
+
 interface TableNodeProps {
   table: Table;
   selected: boolean;
-  lockedBy?: string;
-  users: Record<string, DemoUser>;
+  lockedBy?: LockUser;
   fkFieldIds: Set<string>;
   onSelect: (id: string) => void;
   onDragStart: (e: MouseEvent, id: string) => void;
@@ -25,13 +29,11 @@ export function TableNode({
   table,
   selected,
   lockedBy,
-  users,
   fkFieldIds,
   onSelect,
   onDragStart,
   onGrip,
 }: TableNodeProps) {
-  const locker = lockedBy ? users[lockedBy] : undefined;
   return (
     <div
       className={'node' + (selected ? ' sel' : '') + (lockedBy ? ' locked' : '')}
@@ -41,10 +43,10 @@ export function TableNode({
         onSelect(table.id);
       }}
     >
-      {locker && (
-        <div className="node__badge-lock" style={{ background: locker.color }}>
+      {lockedBy && (
+        <div className="node__badge-lock" style={{ background: lockedBy.color }}>
           <Icon name="lock" size={11} />
-          {locker.name.split(' ')[0]} editing
+          {lockedBy.name.split(' ')[0]} editing
         </div>
       )}
       <div className="node__strip" style={{ background: table.color ?? 'var(--ink-4)' }} />
