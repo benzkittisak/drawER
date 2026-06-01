@@ -4,7 +4,18 @@
  */
 import { useShallow } from 'zustand/react/shallow';
 import type { Diagram, Id, Relationship, Table } from '@core';
-import type { Activity, ConnectionState, PresenceUser, RemotePresence } from '@collab';
+import {
+  diffVersion,
+  listVersions,
+  type Activity,
+  type ActivityEntry,
+  type Comment,
+  type ConnectionState,
+  type DiffTag,
+  type PresenceUser,
+  type RemotePresence,
+  type VersionMeta,
+} from '@collab';
 import { useEditorStore, type Tool } from './store';
 
 export function useIdentity(): PresenceUser {
@@ -112,6 +123,41 @@ export interface CanvasPresence {
   peers: number;
   /** tableId → the presence user currently editing it (advisory lock). */
   locks: Record<string, { name: string; color: string }>;
+}
+
+export function useComments(): Comment[] {
+  return useEditorStore((s) => s.comments);
+}
+
+export function useActivity(): ActivityEntry[] {
+  return useEditorStore((s) => s.activity);
+}
+
+export function useCommentActions(): {
+  addComment: (input: { x: number; y: number; tableId: string | null; body: string }) => void;
+  resolveComment: (id: string) => void;
+  addReply: (id: string, body: string) => void;
+} {
+  return useEditorStore(
+    useShallow((s) => ({ addComment: s.addComment, resolveComment: s.resolveComment, addReply: s.addReply })),
+  );
+}
+
+export function useVersions(): {
+  list: () => VersionMeta[];
+  diff: (versionId: string) => DiffTag[];
+  save: (label: string) => VersionMeta | null;
+  restore: (versionId: string) => void;
+} {
+  const diagramId = useEditorStore((s) => s.diagram.id);
+  const save = useEditorStore((s) => s.saveVersion);
+  const restore = useEditorStore((s) => s.restoreVersion);
+  return {
+    list: () => listVersions(diagramId),
+    diff: (versionId) => diffVersion(diagramId, versionId, useEditorStore.getState().diagram),
+    save,
+    restore,
+  };
 }
 
 export function useCanvasPresence(): CanvasPresence {

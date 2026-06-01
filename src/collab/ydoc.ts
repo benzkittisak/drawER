@@ -7,6 +7,8 @@
  *   relationships  Y.Map<relId, Y.Map>
  *   aux            Y.Map   — notes/areas/customTypes/enums as plain JSON arrays (not concurrently
  *                            edited in the UI yet, so last-writer-wins per collection is fine)
+ *   comments       Y.Map<commentId, Y.Map>  — collab metadata, not part of the core Diagram model
+ *   activity       Y.Array  — append-only feed of edit events
  *
  * The only module that imports `yjs`. UI reaches state through @store hooks.
  */
@@ -23,6 +25,8 @@ export interface DocMaps {
   tables: Y.Map<YMap>;
   rels: Y.Map<YMap>;
   aux: YMap;
+  comments: Y.Map<YMap>;
+  activity: YArr;
 }
 
 export function createDoc(): { doc: Y.Doc; maps: DocMaps } {
@@ -32,6 +36,8 @@ export function createDoc(): { doc: Y.Doc; maps: DocMaps } {
     tables: doc.getMap('tables'),
     rels: doc.getMap('relationships'),
     aux: doc.getMap('aux'),
+    comments: doc.getMap('comments'),
+    activity: doc.getArray('activity'),
   };
   return { doc, maps };
 }

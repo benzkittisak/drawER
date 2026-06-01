@@ -10,15 +10,20 @@
  */
 import { create } from 'zustand';
 import type { Diagram, Field, Id, Relationship, Table } from '@core';
-import { createDiagram } from '@core';
+import { createDiagram, newId } from '@core';
 import {
   getLocalIdentity,
   mut,
+  saveVersion as persistVersion,
+  restoreVersion as restoreVersionInDoc,
   session,
   type Activity,
+  type ActivityEntry,
+  type Comment,
   type ConnectionState,
   type PresenceUser,
   type RemotePresence,
+  type VersionMeta,
 } from '@collab';
 
 export type Tool = 'select' | 'pan' | 'rel' | 'comment' | 'note';
@@ -30,6 +35,8 @@ export interface EditorState {
   connection: ConnectionState;
   others: RemotePresence[];
   identity: PresenceUser;
+  comments: Comment[];
+  activity: ActivityEntry[];
 
   // editor ui
   setSelected: (id: Id | null) => void;
@@ -61,6 +68,15 @@ export interface EditorState {
   setCursor: (p: { x: number; y: number } | null) => void;
   setSelectionPresence: (ids: string[]) => void;
   setActivity: (a: Activity) => void;
+
+  // comments
+  addComment: (input: { x: number; y: number; tableId: string | null; body: string }) => void;
+  resolveComment: (id: string) => void;
+  addReply: (id: string, body: string) => void;
+
+  // versions
+  saveVersion: (label: string) => VersionMeta | null;
+  restoreVersion: (versionId: string) => void;
 }
 
 const EMPTY = createDiagram('untitled', 'Untitled diagram', 'postgres');
@@ -73,6 +89,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   connection: { status: 'local', isShared: false, roomId: null },
   others: [],
   identity: IDENTITY,
+  comments: [],
+  activity: [],
 
   setSelected: (id) => set({ selected: id }),
   setTool: (t) => set({ tool: t }),
@@ -83,7 +101,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   },
 
   renameDiagram: (name) => session.transact((m) => mut.renameDiagram(m, name)),
-  addTable: (table) => session.transact((m) => mut.addTable(m, table)),
+  addTable: (table) => {
+    session.transact((m) => mut.addTable(m, table));
+    logAct(get().identity, 'created table', table.name);
+  },
   updateTable: (id, patch) => session.transact((m) => mut.updateTable(m, id, patch)),
 
   // optimistic, local-only during drag (no doc write); peers see the awareness 'dragging' activity
@@ -97,10 +118,15 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   updateField: (tableId, fieldId, patch) => session.transact((m) => mut.updateField(m, tableId, fieldId, patch)),
   removeField: (tableId, fieldId) => session.transact((m) => mut.removeField(m, tableId, fieldId)),
   reorderField: (tableId, fieldId, toIndex) => session.transact((m) => mut.reorderField(m, tableId, fieldId, toIndex)),
-  addRelationship: (rel) => session.transact((m) => mut.addRelationship(m, rel)),
+  addRelationship: (rel) => {
+    session.transact((m) => mut.addRelationship(m, rel));
+    logAct(get().identity, 'linked', rel.name);
+  },
   deleteEntity: (id) => {
+    const name = get().diagram.tables.find((t) => t.id === id)?.name ?? 'an item';
     if (get().selected === id) set({ selected: null });
     session.transact((m) => mut.deleteEntity(m, id));
+    logAct(get().identity, 'deleted', name);
   },
 
   shareRoom: () => session.shareRoom(),
@@ -111,9 +137,49 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   setCursor: (p) => session.setCursor(p),
   setSelectionPresence: (ids) => session.setSelection(ids),
   setActivity: (a) => session.setActivity(a),
+
+  addComment: ({ x, y, tableId, body }) => {
+    const me = get().identity;
+    session.addComment({
+      id: newId(),
+      x,
+      y,
+      tableId,
+      resolved: false,
+      author: me.id,
+      authorName: me.name,
+      authorColor: me.color,
+      body,
+      createdAt: Date.now(),
+      replies: [],
+    });
+    logAct(me, 'commented on', tableId ?? 'the canvas');
+  },
+  resolveComment: (id) => session.resolveComment(id),
+  addReply: (id, body) => {
+    const me = get().identity;
+    session.addReply(id, { author: me.id, authorName: me.name, authorColor: me.color, body, ts: Date.now() });
+  },
+
+  saveVersion: (label) => persistVersion(get().diagram.id, label, get().identity),
+  restoreVersion: (versionId) => restoreVersionInDoc(get().diagram.id, versionId),
 }));
+
+function logAct(identity: PresenceUser, action: string, target: string): void {
+  session.logActivity({
+    id: newId(),
+    who: identity.id,
+    whoName: identity.name,
+    whoColor: identity.color,
+    action,
+    target,
+    ts: Date.now(),
+  });
+}
 
 // Wire session → store (connection + presence). Identity is set once for this browser.
 session.setIdentity(IDENTITY);
 session.onConnectionChange((c) => useEditorStore.setState({ connection: c }));
 session.onOthersChange((others) => useEditorStore.setState({ others }));
+session.onCommentsChange((comments) => useEditorStore.setState({ comments }));
+session.onActivityChange((activity) => useEditorStore.setState({ activity }));

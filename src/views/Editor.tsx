@@ -10,12 +10,12 @@ import { createDiagram } from '@core';
 import {
   loadDiagram as loadFromStorage,
   saveDiagram,
+  useComments,
   useConnection,
   useDiagram,
   useEditorActions,
 } from '@store';
-import type { DemoComment } from '@data/types';
-import { Canvas, type NewCommentDraft } from '@canvas/Canvas';
+import { Canvas } from '@canvas/Canvas';
 import { TopBar } from './panels/TopBar';
 import { LeftPanel } from './panels/LeftPanel';
 import { RightPanel } from './panels/RightPanel';
@@ -65,39 +65,27 @@ export function Editor({ diagramId, joinRoom = false, onDashboard, onHistory }: 
     return () => clearTimeout(t);
   }, [diagram]);
 
+  const comments = useComments();
   const [leftOpen, setLeftOpen] = useState(true);
   const [rightOpen, setRightOpen] = useState(true);
   const [shareOpen, setShareOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
-  const [comments, setComments] = useState<DemoComment[]>(() => seed.comments.map((c) => ({ ...c })));
-  const [activeComment, setActiveComment] = useState<DemoComment | null>(null);
+  const [draft, setDraft] = useState<{ x: number; y: number } | null>(null);
+  const [openId, setOpenId] = useState<string | null>(null);
+  const activeComment = comments.find((c) => c.id === openId) ?? null;
 
-  const openComment = (c: DemoComment | NewCommentDraft) => {
-    if ('isNew' in c && c.isNew) {
-      const nc: DemoComment = {
-        id: 'c' + Date.now(),
-        x: c.x,
-        y: c.y,
-        table: 'canvas',
-        resolved: false,
-        author: 'you',
-        msg: '',
-        time: 'now',
-        replies: 0,
-        isNew: true,
-      };
-      setComments((p) => [...p, nc]);
-      setActiveComment(nc);
-    } else {
-      setActiveComment(c as DemoComment);
-    }
+  const placeComment = (x: number, y: number) => {
+    setOpenId(null);
+    setDraft({ x, y });
   };
-
-  const resolveComment = () => {
-    if (!activeComment) return;
-    setComments((p) => p.map((c) => (c.id === activeComment.id ? { ...c, resolved: !c.resolved } : c)));
-    setActiveComment((c) => (c ? { ...c, resolved: !c.resolved } : c));
+  const openComment = (id: string) => {
+    setDraft(null);
+    setOpenId(id);
+  };
+  const closeComment = () => {
+    setDraft(null);
+    setOpenId(null);
   };
 
   return (
@@ -117,35 +105,21 @@ export function Editor({ diagramId, joinRoom = false, onDashboard, onHistory }: 
         onToggleRight={() => setRightOpen((v) => !v)}
       />
       <div className="work">
-        {leftOpen && <LeftPanel users={seed.users} locks={seed.locks} />}
+        {leftOpen && <LeftPanel users={seed.users} locks={{}} />}
         <Canvas
           users={seed.users}
           locks={seed.locks}
           liveUsers={seed.liveUsers}
-          comments={comments}
+          draft={draft}
           motion={SETTINGS.motion}
           grid={SETTINGS.grid}
           pins={SETTINGS.pins}
+          onPlaceComment={placeComment}
           onOpenComment={openComment}
         />
-        {rightOpen && (
-          <RightPanel
-            users={seed.users}
-            liveUsers={seed.liveUsers}
-            locks={seed.locks}
-            comments={comments}
-            activity={seed.activity}
-            onOpenComment={openComment}
-            onShare={() => setShareOpen(true)}
-          />
-        )}
-        {activeComment && (
-          <CommentCard
-            comment={activeComment}
-            users={seed.users}
-            onClose={() => setActiveComment(null)}
-            onResolve={resolveComment}
-          />
+        {rightOpen && <RightPanel onOpenComment={openComment} onShare={() => setShareOpen(true)} />}
+        {(activeComment || draft) && (
+          <CommentCard comment={activeComment} draft={draft} onClose={closeComment} />
         )}
         {shareOpen && <ShareModal onClose={() => setShareOpen(false)} />}
         {exportOpen && <ExportModal onClose={() => setExportOpen(false)} />}

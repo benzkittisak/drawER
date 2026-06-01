@@ -17,6 +17,8 @@ import { WebsocketProvider } from 'y-websocket';
 import type { Diagram } from '@core';
 import { createDoc, isEmpty, LOCAL_ORIGIN, type DocMaps } from './ydoc';
 import { mut, readDiagram, writeDiagram } from './schema';
+import { commentMut, readComments, type Comment, type CommentReply } from './comments';
+import { pushActivity, readActivity, type ActivityEntry } from './activity';
 import {
   readOthers,
   setLocalPresence,
@@ -36,6 +38,8 @@ export interface ConnectionState {
 type SnapshotListener = (d: Diagram) => void;
 type ConnectionListener = (c: ConnectionState) => void;
 type OthersListener = (others: RemotePresence[]) => void;
+type CommentsListener = (comments: Comment[]) => void;
+type ActivityListener = (activity: ActivityEntry[]) => void;
 
 const SYNC_URL = (import.meta.env.VITE_SYNC_URL as string | undefined) || 'ws://localhost:1234';
 
@@ -49,10 +53,18 @@ class CollabSession {
   private onSnapshot: SnapshotListener | null = null;
   private onConnection: ConnectionListener | null = null;
   private onOthers: OthersListener | null = null;
+  private onComments: CommentsListener | null = null;
+  private onActivity: ActivityListener | null = null;
 
   private identity: PresenceUser | null = null;
   private roomId: string | null = null;
   private observer = (): void => this.scheduleFlush();
+  private commentsObserver = (): void => {
+    if (this.maps) this.onComments?.(readComments(this.maps));
+  };
+  private activityObserver = (): void => {
+    if (this.maps) this.onActivity?.(readActivity(this.maps));
+  };
   private awarenessHandler = (): void => {
     if (this.ws) this.onOthers?.(readOthers(this.ws.awareness));
   };
@@ -81,8 +93,12 @@ class CollabSession {
     maps.rels.observeDeep(this.observer);
     maps.meta.observe(this.observer);
     maps.aux.observe(this.observer);
+    maps.comments.observeDeep(this.commentsObserver);
+    maps.activity.observe(this.activityObserver);
 
     this.flush();
+    this.commentsObserver();
+    this.activityObserver();
     this.emitConnection();
   }
 
@@ -130,6 +146,41 @@ class CollabSession {
   onOthersChange(cb: OthersListener): void {
     this.onOthers = cb;
   }
+  onCommentsChange(cb: CommentsListener): void {
+    this.onComments = cb;
+  }
+  onActivityChange(cb: ActivityListener): void {
+    this.onActivity = cb;
+  }
+
+  // ---- comments / activity ----
+  addComment(c: Comment): void {
+    this.transact((m) => commentMut.add(m, c));
+  }
+  resolveComment(id: string): void {
+    this.transact((m) => commentMut.resolve(m, id));
+  }
+  addReply(id: string, reply: CommentReply): void {
+    this.transact((m) => commentMut.reply(m, id, reply));
+  }
+  logActivity(entry: ActivityEntry): void {
+    this.transact((m) => pushActivity(m, entry));
+  }
+
+  // ---- version snapshots ----
+  getStateUpdate(): Uint8Array | null {
+    return this.doc ? Y.encodeStateAsUpdate(this.doc) : null;
+  }
+  /** Replace the current diagram structure with a snapshot's (keeps comments/activity). */
+  restoreDiagram(diagram: Diagram): void {
+    this.transact((m) => {
+      m.tables.clear();
+      m.rels.clear();
+      m.aux.clear();
+      writeDiagram(m, diagram);
+    });
+  }
+
   setIdentity(user: PresenceUser): void {
     this.identity = user;
     if (this.ws) setLocalUser(this.ws.awareness, user);
@@ -196,6 +247,8 @@ class CollabSession {
       this.maps.rels.unobserveDeep(this.observer);
       this.maps.meta.unobserve(this.observer);
       this.maps.aux.unobserve(this.observer);
+      this.maps.comments.unobserveDeep(this.commentsObserver);
+      this.maps.activity.unobserve(this.activityObserver);
     }
     this.disconnect();
     this.undoMgr?.destroy();
@@ -207,3 +260,12 @@ class CollabSession {
 
 export const session = new CollabSession();
 export { mut };
+
+/** Decode a version snapshot (Yjs update) into a plain Diagram, off to the side. */
+export function decodeDiagramSnapshot(update: Uint8Array): Diagram {
+  const { doc, maps } = createDoc();
+  Y.applyUpdate(doc, update);
+  const d = readDiagram(maps);
+  doc.destroy();
+  return d;
+}

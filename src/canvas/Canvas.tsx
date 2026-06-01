@@ -16,6 +16,7 @@ import {
 import { createRelationship, createField, createTable, newId } from '@core';
 import {
   useCanvasPresence,
+  useComments,
   useEditorActions,
   usePresence,
   useRelationships,
@@ -23,7 +24,7 @@ import {
   useTables,
   useTool,
 } from '@store';
-import type { DemoComment, DemoUser, LiveUser } from '@data/types';
+import type { DemoUser, LiveUser } from '@data/types';
 import { Icon, type IconName } from '@ui/Icon';
 import { Btn } from '@ui/atoms';
 import { CommentPins } from './CommentPins';
@@ -33,21 +34,16 @@ import { RelationshipLayer, type LinkingState } from './RelationshipLayer';
 import { TableNode, type LockUser } from './TableNode';
 import type { Tool } from '@store';
 
-export interface NewCommentDraft {
-  x: number;
-  y: number;
-  isNew: true;
-}
-
 interface CanvasProps {
   users: Record<string, DemoUser>;
   locks: Record<string, string>;
   liveUsers: LiveUser[];
-  comments: DemoComment[];
+  draft: { x: number; y: number } | null;
   motion: boolean;
   grid?: boolean;
   pins?: boolean;
-  onOpenComment: (c: DemoComment | NewCommentDraft) => void;
+  onPlaceComment: (x: number, y: number) => void;
+  onOpenComment: (id: string) => void;
 }
 
 interface Camera {
@@ -66,14 +62,16 @@ export function Canvas({
   users,
   locks,
   liveUsers,
-  comments,
+  draft,
   motion,
   grid = true,
   pins = true,
+  onPlaceComment,
   onOpenComment,
 }: CanvasProps) {
   const tables = useTables();
   const rels = useRelationships();
+  const comments = useComments();
   const [selected, setSelected] = useSelection();
   const [tool, setTool] = useTool();
   const actions = useEditorActions();
@@ -113,7 +111,7 @@ export function Canvas({
   const onBgDown = (e: MouseEvent) => {
     if (tool === 'comment') {
       const p = toCanvas(e.clientX, e.clientY);
-      onOpenComment({ x: Math.round(p.x), y: Math.round(p.y), isNew: true });
+      onPlaceComment(Math.round(p.x), Math.round(p.y));
       setTool('select');
       return;
     }
@@ -282,7 +280,7 @@ export function Canvas({
           />
         ))}
 
-        {pins && <CommentPins comments={comments} onOpen={onOpenComment} />}
+        {pins && <CommentPins comments={comments} draft={draft} onOpen={onOpenComment} />}
 
         {presence.isShared ? (
           <RemoteCursorsLayer />
