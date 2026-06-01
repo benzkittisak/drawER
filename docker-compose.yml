@@ -1,0 +1,33 @@
+# drawDB Live — full stack.
+#   sync : Yjs websocket server + SQLite database (persistent volume) on :1234
+#   web  : the built SPA served by nginx on :8080
+#
+# Usage:   docker compose up --build      then open http://localhost:8080
+# The browser reaches the sync server via the published host port ws://localhost:1234,
+# which is what VITE_SYNC_URL is baked to below. To deploy elsewhere, rebuild web with
+# --build-arg VITE_SYNC_URL=wss://your-host (and publish the sync server there).
+services:
+  sync:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    ports:
+      - '1234:1234'
+    volumes:
+      - drawer-data:/data
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VITE_SYNC_URL: ws://localhost:1234
+    ports:
+      - '8080:80'
+    depends_on:
+      - sync
+    restart: unless-stopped
+
+volumes:
+  drawer-data:
