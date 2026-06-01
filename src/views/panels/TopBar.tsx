@@ -1,9 +1,15 @@
 /**
  * TopBar — brand, breadcrumb, panel toggles, real presence avatars, Share.
  */
-import { useIdentity, useOthers } from '@store';
+import { useConnection, useIdentity, useOthers } from '@store';
 import { Icon } from '@ui/Icon';
 import { Avatar, Btn } from '@ui/atoms';
+
+const STATUS = {
+  connected: { label: 'Live · synced', color: 'var(--u-you)' },
+  connecting: { label: 'Connecting…', color: '#d97706' },
+  local: { label: 'Offline', color: 'var(--ink-4)' },
+} as const;
 
 const initials = (n: string): string =>
   n.split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase() || 'NA';
@@ -37,6 +43,8 @@ export function TopBar({
 }: TopBarProps) {
   const me = useIdentity();
   const others = useOthers();
+  const { connection } = useConnection();
+  const status = STATUS[connection.status];
   const online = [
     { id: me.id, name: 'You', short: 'ME', color: me.color },
     ...others.map((o) => ({ id: o.user.id, name: o.user.name, short: initials(o.user.name), color: o.user.color })),
@@ -58,8 +66,8 @@ export function TopBar({
           <Icon name="chevronDown" size={14} style={{ color: 'var(--ink-3)' }} />
         </div>
         <span className="saved">
-          <span className="dot" />
-          Saved · synced
+          <span className="dot" style={{ background: status.color }} />
+          {status.label}
         </span>
       </div>
       <div className="spacer" />
