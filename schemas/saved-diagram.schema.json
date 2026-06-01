@@ -1,0 +1,165 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://drawdb.live/schemas/saved-diagram.schema.json",
+  "title": "SavedDiagram",
+  "description": "The canonical drawDB Live export / save format. Stable, versioned interchange for downstream tools. Produced by core/serialize/json.ts (serialize) and validated on import (parse + migrate).",
+  "type": "object",
+  "required": ["version", "app", "diagram"],
+  "additionalProperties": false,
+  "properties": {
+    "version": { "type": "integer", "minimum": 1, "description": "Schema version of this file. Older versions are upgraded by migrate()." },
+    "exportedAt": { "type": "string", "description": "ISO-8601 timestamp the file was exported (informational)." },
+    "app": { "const": "drawDB-live" },
+    "diagram": { "$ref": "#/$defs/Diagram" }
+  },
+  "$defs": {
+    "Id": { "type": "string", "minLength": 1 },
+    "DialectId": { "enum": ["mysql", "mariadb", "postgres", "sqlite", "mssql", "oracle"] },
+    "Cardinality": { "enum": ["one_to_one", "one_to_many", "many_to_one", "many_to_many"] },
+    "RefAction": { "enum": ["NO ACTION", "RESTRICT", "CASCADE", "SET NULL", "SET DEFAULT"] },
+    "Position": {
+      "type": "object",
+      "required": ["x", "y"],
+      "additionalProperties": false,
+      "properties": { "x": { "type": "number" }, "y": { "type": "number" } }
+    },
+    "Diagram": {
+      "type": "object",
+      "required": ["id", "name", "dialect", "tables", "relationships"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/Id" },
+        "name": { "type": "string" },
+        "dialect": { "$ref": "#/$defs/DialectId" },
+        "tables": { "type": "array", "items": { "$ref": "#/$defs/Table" } },
+        "relationships": { "type": "array", "items": { "$ref": "#/$defs/Relationship" } },
+        "notes": { "type": "array", "items": { "$ref": "#/$defs/Note" } },
+        "areas": { "type": "array", "items": { "$ref": "#/$defs/Area" } },
+        "customTypes": { "type": "array", "items": { "$ref": "#/$defs/CustomType" } },
+        "enums": { "type": "array", "items": { "$ref": "#/$defs/EnumType" } },
+        "meta": {
+          "type": "object",
+          "properties": {
+            "createdAt": { "type": "number" },
+            "updatedAt": { "type": "number" }
+          }
+        }
+      }
+    },
+    "Table": {
+      "type": "object",
+      "required": ["id", "name", "fields", "position"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/Id" },
+        "name": { "type": "string" },
+        "schema": { "type": "string" },
+        "color": { "type": "string" },
+        "comment": { "type": "string" },
+        "position": { "$ref": "#/$defs/Position" },
+        "fields": { "type": "array", "items": { "$ref": "#/$defs/Field" } },
+        "indices": { "type": "array", "items": { "$ref": "#/$defs/Index" } }
+      }
+    },
+    "Field": {
+      "type": "object",
+      "required": ["id", "name", "type"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/Id" },
+        "name": { "type": "string" },
+        "type": { "type": "string", "description": "Catalog type key, e.g. 'uuid', 'varchar', 'int4', 'enum', 'timestamp'." },
+        "size": { "type": "number" },
+        "scale": { "type": "number" },
+        "values": { "type": "array", "items": { "type": "string" }, "description": "Inline enum members when type === 'enum'." },
+        "primary": { "type": "boolean" },
+        "unique": { "type": "boolean" },
+        "notNull": { "type": "boolean" },
+        "autoIncrement": { "type": "boolean" },
+        "default": { "type": "string" },
+        "comment": { "type": "string" },
+        "customTypeId": { "$ref": "#/$defs/Id" }
+      }
+    },
+    "Index": {
+      "type": "object",
+      "required": ["id", "name", "fieldIds"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/Id" },
+        "name": { "type": "string" },
+        "fieldIds": { "type": "array", "items": { "$ref": "#/$defs/Id" } },
+        "unique": { "type": "boolean" }
+      }
+    },
+    "Relationship": {
+      "type": "object",
+      "required": ["id", "fromTableId", "fromFieldId", "toTableId", "toFieldId", "cardinality"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/Id" },
+        "name": { "type": "string" },
+        "fromTableId": { "$ref": "#/$defs/Id" },
+        "fromFieldId": { "$ref": "#/$defs/Id" },
+        "toTableId": { "$ref": "#/$defs/Id" },
+        "toFieldId": { "$ref": "#/$defs/Id" },
+        "cardinality": { "$ref": "#/$defs/Cardinality" },
+        "onUpdate": { "$ref": "#/$defs/RefAction" },
+        "onDelete": { "$ref": "#/$defs/RefAction" }
+      }
+    },
+    "CustomType": {
+      "type": "object",
+      "required": ["id", "name", "fields"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/Id" },
+        "name": { "type": "string" },
+        "fields": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "type"],
+            "additionalProperties": false,
+            "properties": { "name": { "type": "string" }, "type": { "type": "string" } }
+          }
+        }
+      }
+    },
+    "EnumType": {
+      "type": "object",
+      "required": ["id", "name", "values"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/Id" },
+        "name": { "type": "string" },
+        "values": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "Note": {
+      "type": "object",
+      "required": ["id", "content", "position"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/Id" },
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "position": { "$ref": "#/$defs/Position" },
+        "color": { "type": "string" }
+      }
+    },
+    "Area": {
+      "type": "object",
+      "required": ["id", "name", "position", "width", "height"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/Id" },
+        "name": { "type": "string" },
+        "position": { "$ref": "#/$defs/Position" },
+        "width": { "type": "number" },
+        "height": { "type": "number" },
+        "color": { "type": "string" }
+      }
+    }
+  }
+}
