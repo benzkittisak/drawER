@@ -16,7 +16,11 @@ rebuild of drawdb — see "Locked decisions" below.
   - **Collaboration** (`src/collab`): Yjs doc + y-indexeddb + y-websocket, **live cursors +
     presence + advisory locks** (Awareness), `Y.UndoManager`, Share/join-by-link, pinned
     comments, activity feed, local version history (snapshots/diffs/restore).
-  - **Local-first**: IndexedDB + a Dashboard library; works offline, syncs when shared.
+  - **Server database**: `npm run sync` runs a Yjs websocket server that persists every diagram
+    to a real **SQLite** DB (Node's built-in `node:sqlite`, no native deps) and serves
+    `GET /api/diagrams`. Clients connect on every open, so data lives server-side and is
+    cross-device; IndexedDB is the offline cache. No auth (open by id/link). Dashboard lists from
+    the DB (falls back to local when offline).
   - Heavy parsers (node-sql-parser / @dbml/core) are **lazy-loaded** (dynamic import).
   - `typecheck` / `lint` / `depcruise` / `test` (38) / `build` all green.
 - **Deferred (M7 / future):** accounts + server-persisted team workspace, roles/permissions,
@@ -39,7 +43,7 @@ npm run typecheck   # tsc --noEmit
 npm run lint        # ESLint
 npm run depcruise   # module import-boundary check (must pass)
 npm run format      # Prettier
-npm run sync        # optional Yjs websocket server (ws://localhost:1234) for live collaboration
+npm run sync        # Yjs websocket server + SQLite database (ws+http on :1234) — diagram storage
 ```
 Before committing, the change must pass: `typecheck`, `lint`, `depcruise`, `test`, `build`.
 

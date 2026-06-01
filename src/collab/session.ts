@@ -70,16 +70,29 @@ class CollabSession {
   };
   private flushScheduled = false;
 
-  /** Open a diagram: fresh doc + IndexedDB; populate from `diagram` only if the doc is empty. */
+  /**
+   * Open a diagram. Local-first (IndexedDB) AND always connected to the server DB so data
+   * persists server-side and teammates are live. Seeds from `diagram` only if neither
+   * IndexedDB nor the server already had it (so opening an existing diagram on a new device,
+   * or with a stale blank, doesn't clobber the stored copy).
+   */
   async open(diagram: Diagram, onSnapshot: SnapshotListener): Promise<void> {
     this.teardown();
     const { doc, maps } = createDoc();
     this.doc = doc;
     this.maps = maps;
     this.onSnapshot = onSnapshot;
+    this.roomId = diagram.id;
 
     this.idb = new IndexeddbPersistence(`drawer-${diagram.id}`, doc);
     await this.idb.whenSynced;
+
+    // Always connect to the server (real DB-backed). Presence is active whenever connected.
+    this.ws = new WebsocketProvider(SYNC_URL, `drawer-${diagram.id}`, doc, { connect: true });
+    if (this.identity) setLocalUser(this.ws.awareness, this.identity);
+    this.ws.awareness.on('change', this.awarenessHandler);
+    this.ws.on('status', () => this.emitConnection());
+    await waitForSync(this.ws, 1200);
 
     if (isEmpty(maps)) {
       doc.transact(() => writeDiagram(maps, diagram), 'load');
@@ -201,24 +214,23 @@ class CollabSession {
   }
 
   // ---- sharing ----
-  shareRoom(roomId?: string): string {
-    if (!this.doc) return '';
-    const id = roomId ?? (this.maps?.meta.get('id') as string) ?? 'untitled';
-    if (this.ws && this.roomId === id) return this.shareUrl(id);
-    this.disconnect();
-    this.roomId = id;
-    this.ws = new WebsocketProvider(SYNC_URL, `drawer-${id}`, this.doc, { connect: true });
-    if (this.identity) setLocalUser(this.ws.awareness, this.identity);
-    this.ws.awareness.on('change', this.awarenessHandler);
-    this.ws.on('status', () => this.emitConnection());
-    this.awarenessHandler();
-    this.emitConnection();
-    return this.shareUrl(id);
+  /** Diagrams are always connected to the server on open; this just (re)connects if the user
+   *  left, and returns the shareable link. */
+  shareRoom(): string {
+    if (!this.doc || !this.roomId) return '';
+    if (!this.ws) {
+      this.ws = new WebsocketProvider(SYNC_URL, `drawer-${this.roomId}`, this.doc, { connect: true });
+      if (this.identity) setLocalUser(this.ws.awareness, this.identity);
+      this.ws.awareness.on('change', this.awarenessHandler);
+      this.ws.on('status', () => this.emitConnection());
+      this.emitConnection();
+    }
+    return this.shareUrl(this.roomId);
   }
 
+  /** Go offline (stop syncing/presence) without closing the diagram. */
   leaveRoom(): void {
     this.disconnect();
-    this.roomId = null;
     this.onOthers?.([]);
     this.emitConnection();
   }
@@ -256,6 +268,25 @@ class CollabSession {
     this.doc?.destroy();
     this.doc = this.maps = this.idb = this.undoMgr = null;
   }
+}
+
+/** Resolve once the provider has done its initial server sync, or after `ms` (offline tolerant). */
+function waitForSync(provider: WebsocketProvider, ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    if (provider.synced) return resolve();
+    let done = false;
+    const onSync = (isSynced: boolean): void => {
+      if (isSynced) finish();
+    };
+    const finish = (): void => {
+      if (done) return;
+      done = true;
+      provider.off('sync', onSync);
+      resolve();
+    };
+    provider.on('sync', onSync);
+    setTimeout(finish, ms);
+  });
 }
 
 export const session = new CollabSession();

@@ -1,14 +1,13 @@
 /**
- * Dashboard — the local diagram library. Reads real saved diagrams from @store/persistence.
- *
- * Team features (members, cross-diagram "live now", roles) need accounts + a backend and are
- * deferred to M7. This view is local-first: it lists what's stored in this browser.
+ * Dashboard — the diagram library. Lists diagrams from the server database (GET /api/diagrams)
+ * and falls back to the local store (localStorage) when the server is unreachable (offline).
  */
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { listDiagrams, useIdentity, type DiagramSummary } from '@store';
 import { DIALECT_LABELS, type DialectId } from '@core';
 import { Icon } from '@ui/Icon';
 import { Avatar, Btn } from '@ui/atoms';
+import { CreditsModal } from './panels/CreditsModal';
 
 interface MeUser {
   id: string;
@@ -16,7 +15,9 @@ interface MeUser {
   short: string;
   color: string;
 }
-import { CreditsModal } from './panels/CreditsModal';
+
+// REST base derived from the sync URL (ws://host -> http://host, wss -> https).
+const API_URL = ((import.meta.env.VITE_SYNC_URL as string) || 'ws://localhost:1234').replace(/^ws/, 'http');
 
 function relativeTime(ms: number): string {
   const s = Math.max(0, Math.floor((Date.now() - ms) / 1000));
@@ -93,12 +94,32 @@ export function Dashboard({ onOpen, onNew }: DashboardProps) {
   const [creditsOpen, setCreditsOpen] = useState(false);
   const identity = useIdentity();
   const me: MeUser = { id: identity.id, name: 'You', short: 'ME', color: identity.color };
-  // listDiagrams() reads localStorage synchronously; recompute on each render (cheap).
-  const all = listDiagrams();
-  const shown = useMemo(
-    () => all.filter((d) => d.name.toLowerCase().includes(q.toLowerCase())),
-    [all, q],
-  );
+  const [remote, setRemote] = useState<DiagramSummary[] | null>(null);
+
+  // Fetch the real list from the server DB; null = offline → fall back to the local store.
+  useEffect(() => {
+    let active = true;
+    fetch(`${API_URL}/api/diagrams`)
+      .then((r) => r.json())
+      .then((rows: { id: string; name: string; dialect: string; tableCount: number; updatedAt: number }[]) => {
+        if (active)
+          setRemote(rows.map((r) => ({ id: r.id, name: r.name, dialect: r.dialect, tableCount: r.tableCount, colors: [], updatedAt: r.updatedAt })));
+      })
+      .catch(() => active && setRemote(null));
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  // Merge: server is the source of truth; keep local-only diagrams + local thumbnail colors.
+  const all = useMemo(() => {
+    const byId = new Map<string, DiagramSummary>();
+    for (const d of listDiagrams()) byId.set(d.id, d);
+    if (remote) for (const d of remote) byId.set(d.id, { ...d, colors: byId.get(d.id)?.colors ?? d.colors });
+    return [...byId.values()].sort((a, b) => b.updatedAt - a.updatedAt);
+  }, [remote]);
+
+  const shown = useMemo(() => all.filter((d) => d.name.toLowerCase().includes(q.toLowerCase())), [all, q]);
 
   return (
     <div className="dash">
