@@ -39,11 +39,15 @@ import {
   cameraCenterTable,
   cameraFitDiagram,
   diagramBounds,
+  layoutRelationshipPaths,
+  nextRelationshipFocusSide,
   nodeHeight,
   NODE_W,
+  pickRelationshipAtPoint,
   snapCamera,
   type Camera,
   type DiagramBounds,
+  type RelFocusCycle,
 } from './geometry';
 import { CanvasFind } from './CanvasFind';
 import { TableNode, type LockUser } from './TableNode';
@@ -111,6 +115,7 @@ export function Canvas({
     });
   }, []);
   const drag = useRef<DragState>(null);
+  const relFocusCycleRef = useRef<RelFocusCycle | null>(null);
   const dragPreviewRef = useRef<{ id: string; x: number; y: number } | null>(null);
   const dragPaintRaf = useRef(0);
   const [dragPreview, setDragPreview] = useState<{ id: string; x: number; y: number } | null>(null);
@@ -174,6 +179,7 @@ export function Canvas({
     setDragPreview(null);
   }, []);
   const fkFieldIds = useMemo(() => new Set(rels.map((r) => r.fromFieldId)), [rels]);
+  const relGeometries = useMemo(() => layoutRelationshipPaths(rels, layoutById), [rels, layoutById]);
 
   // Virtualization: on big diagrams render only what intersects the viewport, and collapse field
   // rows when zoomed far out. Small diagrams render everything (culling would cost more than it saves
@@ -259,6 +265,14 @@ export function Canvas({
       setSelectedRel(relId);
     },
     [readonly, setSelectedRel],
+  );
+
+  const onSelectRel = useCallback(
+    (relId: string, clientX: number, clientY: number) => {
+      const next = pickRelationshipAtPoint(relId, clientX, clientY, selectedRel);
+      setSelectedRel(next);
+    },
+    [selectedRel, setSelectedRel],
   );
 
   const onBgDown = (e: MouseEvent) => {
@@ -484,6 +498,24 @@ export function Canvas({
     [tables, setSelected, setSelectedRel, applyCam],
   );
 
+  const focusRelEndpoint = useCallback(
+    (relId: string) => {
+      const rel = rels.find((r) => r.id === relId);
+      if (!rel) return;
+      const from = tables.find((t) => t.id === rel.fromTableId);
+      const to = tables.find((t) => t.id === rel.toTableId);
+      if (!from || !to) return;
+      setSelectedRel(relId);
+      const { side, next } = nextRelationshipFocusSide(relId, relFocusCycleRef.current);
+      relFocusCycleRef.current = next;
+      const table = side === 'from' ? from : to;
+      const r = wrapRef.current?.getBoundingClientRect();
+      if (!r) return;
+      applyCam(cameraCenterTable(table, r.width, r.height, camRef.current.z));
+    },
+    [rels, tables, setSelectedRel, applyCam],
+  );
+
   const addTableAtCenter = useCallback(() => {
     const r = wrapRef.current!.getBoundingClientRect();
     const p = toCanvas(r.left + r.width / 2, r.top + r.height / 2);
@@ -570,6 +602,7 @@ export function Canvas({
         <RelationshipLayer
           rels={rels}
           byId={layoutById}
+          relGeometries={relGeometries}
           selectedRel={selectedRel}
           hotRel={hotRel}
           linking={linking}
@@ -599,12 +632,13 @@ export function Canvas({
         <RelationshipHitLayer
           rels={rels}
           byId={layoutById}
+          relGeometries={relGeometries}
           selectedRel={selectedRel}
           hotRel={hotRel}
-          linking={linking}
           viewRect={cullRect}
           onHot={setHotRel}
-          onSelectRel={setSelectedRel}
+          onSelectRel={onSelectRel}
+          onFocusRel={focusRelEndpoint}
           onContextMenuRel={onRelContextMenu}
         />
 

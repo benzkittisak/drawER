@@ -2,7 +2,7 @@
  * RelationshipLayer — orthogonal edges between field rows, cardinality markers, and labels.
  * Renders graphics below tables; use RelationshipHitLayer on top for selection.
  */
-import { memo, useMemo } from 'react';
+import { memo } from 'react';
 import type { Relationship, Table } from '@core';
 import { CARDINALITY_LABEL } from '@core';
 import {
@@ -10,10 +10,11 @@ import {
   fieldIndex,
   nodeHeight,
   NODE_W,
+  orderRelsForPaint,
   relEndpointKinds,
-  relPathBetween,
   wirePath,
   type DiagramBounds,
+  type RelGeometry,
 } from './geometry';
 
 export interface LinkingState {
@@ -29,9 +30,10 @@ const SVGH = 1600;
 interface LayerProps {
   rels: Relationship[];
   byId: Record<string, Table>;
+  relGeometries: Map<string, RelGeometry | null>;
   selectedRel: string | null;
   hotRel: string | null;
-  linking: LinkingState | null;
+  linking?: LinkingState | null;
   /** When set (large diagrams), skip edges whose endpoints' bounding box is outside the viewport. */
   viewRect?: DiagramBounds | null;
 }
@@ -48,9 +50,7 @@ function edgeInView(a: Table | undefined, b: Table | undefined, vr: DiagramBound
 
 interface EdgeProps {
   rel: Relationship;
-  /** Table objects (not a map) so the edge memoizes on table identity — see relPathBetween. */
-  from: Table | undefined;
-  to: Table | undefined;
+  geometry: RelGeometry;
   active: boolean;
 }
 
@@ -88,9 +88,7 @@ function EndpointMarker({
   );
 }
 
-const RelEdgeGraphics = memo(function RelEdgeGraphics({ rel, from, to, active }: EdgeProps) {
-  const g = useMemo(() => relPathBetween(rel, from, to), [rel, from, to]);
-  if (!g) return null;
+const RelEdgeGraphics = memo(function RelEdgeGraphics({ rel, geometry: g, active }: EdgeProps) {
   const kinds = relEndpointKinds(rel.cardinality);
   const label = CARDINALITY_LABEL[rel.cardinality];
   const lw = label.length * 6.2 + 14;
@@ -113,6 +111,7 @@ const RelEdgeGraphics = memo(function RelEdgeGraphics({ rel, from, to, active }:
 export const RelationshipLayer = memo(function RelationshipLayer({
   rels,
   byId,
+  relGeometries,
   selectedRel,
   hotRel,
   linking,
@@ -127,14 +126,18 @@ export const RelationshipLayer = memo(function RelationshipLayer({
     }
   }
 
+  const paintRels = orderRelsForPaint(rels, selectedRel, hotRel);
+
   return (
     <svg className="canvas-layer canvas-layer--rels" width={SVGW} height={SVGH} aria-hidden style={{ pointerEvents: 'none' }}>
-      {rels.map((r) => {
+      {paintRels.map((r) => {
+        const g = relGeometries.get(r.id);
+        if (!g) return null;
         const from = byId[r.fromTableId];
         const to = byId[r.toTableId];
         if (viewRect && !edgeInView(from, to, viewRect)) return null;
         const active = hotRel === r.id || selectedRel === r.id;
-        return <RelEdgeGraphics key={r.id} rel={r} from={from} to={to} active={active} />;
+        return <RelEdgeGraphics key={r.id} rel={r} geometry={g} active={active} />;
       })}
       {linkingPath && <path d={linkingPath} className="rel-path rel-path--linking" />}
     </svg>
@@ -143,34 +146,38 @@ export const RelationshipLayer = memo(function RelationshipLayer({
 
 interface HitProps {
   rel: Relationship;
-  from: Table | undefined;
-  to: Table | undefined;
+  geometry: RelGeometry;
   active: boolean;
   onHot: (id: string | null) => void;
-  onSelectRel: (id: string) => void;
+  onSelectRel: (id: string, clientX: number, clientY: number) => void;
+  onFocusRel: (id: string) => void;
   onContextMenuRel: (id: string, clientX: number, clientY: number) => void;
 }
 
 const RelHitPath = memo(function RelHitPath({
   rel,
-  from,
-  to,
+  geometry: g,
   active,
   onHot,
   onSelectRel,
+  onFocusRel,
   onContextMenuRel,
 }: HitProps) {
-  const g = useMemo(() => relPathBetween(rel, from, to), [rel, from, to]);
-  if (!g) return null;
   return (
     <path
       d={g.d}
+      data-rel-id={rel.id}
       className={'rel-path-hit' + (active ? ' rel-path-hit--active' : '')}
       onMouseEnter={() => onHot(rel.id)}
       onMouseLeave={() => onHot(null)}
       onClick={(e) => {
         e.stopPropagation();
-        onSelectRel(rel.id);
+        onSelectRel(rel.id, e.clientX, e.clientY);
+      }}
+      onDoubleClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onFocusRel(rel.id);
       }}
       onContextMenu={(e) => {
         e.preventDefault();
@@ -184,20 +191,27 @@ const RelHitPath = memo(function RelHitPath({
 export const RelationshipHitLayer = memo(function RelationshipHitLayer({
   rels,
   byId,
+  relGeometries,
   selectedRel,
   hotRel,
   viewRect,
   onHot,
   onSelectRel,
+  onFocusRel,
   onContextMenuRel,
 }: LayerProps & {
   onHot: (id: string | null) => void;
-  onSelectRel: (id: string) => void;
+  onSelectRel: (id: string, clientX: number, clientY: number) => void;
+  onFocusRel: (id: string) => void;
   onContextMenuRel: (id: string, clientX: number, clientY: number) => void;
 }) {
+  const paintRels = orderRelsForPaint(rels, selectedRel, hotRel);
+
   return (
     <svg className="canvas-layer canvas-layer--rel-hits" width={SVGW} height={SVGH} aria-hidden>
-      {rels.map((r) => {
+      {paintRels.map((r) => {
+        const g = relGeometries.get(r.id);
+        if (!g) return null;
         const from = byId[r.fromTableId];
         const to = byId[r.toTableId];
         if (viewRect && !edgeInView(from, to, viewRect)) return null;
@@ -206,11 +220,11 @@ export const RelationshipHitLayer = memo(function RelationshipHitLayer({
           <RelHitPath
             key={r.id}
             rel={r}
-            from={from}
-            to={to}
+            geometry={g}
             active={active}
             onHot={onHot}
             onSelectRel={onSelectRel}
+            onFocusRel={onFocusRel}
             onContextMenuRel={onContextMenuRel}
           />
         );

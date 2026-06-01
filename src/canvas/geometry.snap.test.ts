@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { createField, createTable } from '@core';
-import { cameraCenterTable, snapCamera } from './geometry';
+import { createField, createRelationship, createTable } from '@core';
+import {
+  cameraCenterTable,
+  LANE_SPACING,
+  layoutRelationshipPaths,
+  nextRelationshipFocusSide,
+  orderRelsForPaint,
+  snapCamera,
+} from './geometry';
 
 describe('snapCamera', () => {
   it('leaves camera unchanged when zoom is not ~100%', () => {
@@ -15,6 +22,110 @@ describe('snapCamera', () => {
 
   it('keeps integer pan at z = 1', () => {
     expect(snapCamera({ x: 60, y: 30, z: 1 }, 1)).toEqual({ x: 60, y: 30, z: 1 });
+  });
+});
+
+describe('nextRelationshipFocusSide', () => {
+  it('starts on from for a new relationship', () => {
+    expect(nextRelationshipFocusSide('r1', null)).toEqual({
+      side: 'from',
+      next: { relId: 'r1', next: 'to' },
+    });
+  });
+
+  it('alternates to then from on the same relationship', () => {
+    const a = nextRelationshipFocusSide('r1', null);
+    expect(nextRelationshipFocusSide('r1', a.next)).toEqual({
+      side: 'to',
+      next: { relId: 'r1', next: 'from' },
+    });
+    const b = nextRelationshipFocusSide('r1', a.next);
+    expect(nextRelationshipFocusSide('r1', b.next)).toEqual({
+      side: 'from',
+      next: { relId: 'r1', next: 'to' },
+    });
+  });
+
+  it('resets to from when switching relationships', () => {
+    const a = nextRelationshipFocusSide('r1', null);
+    const b = nextRelationshipFocusSide('r1', a.next);
+    expect(nextRelationshipFocusSide('r2', b.next)).toEqual({
+      side: 'from',
+      next: { relId: 'r2', next: 'to' },
+    });
+  });
+});
+
+describe('layoutRelationshipPaths', () => {
+  const users = createTable('users', 'users', {
+    position: { x: 0, y: 0 },
+    fields: [
+      createField('u1', 'id', 'int4', { primary: true }),
+      createField('u2', 'org_id', 'int4'),
+      createField('u3', 'email', 'varchar'),
+    ],
+  });
+  const orders = createTable('orders', 'orders', {
+    position: { x: 400, y: 0 },
+    fields: [
+      createField('o1', 'id', 'int4', { primary: true }),
+      createField('o2', 'user_id', 'int4'),
+      createField('o3', 'user_email', 'varchar'),
+    ],
+  });
+  const byId = { users, orders };
+
+  it('staggers midX for parallel FKs between the same table pair', () => {
+    const rels = [
+      createRelationship('r-a', { tableId: 'users', fieldId: 'u2' }, { tableId: 'orders', fieldId: 'o2' }),
+      createRelationship('r-b', { tableId: 'users', fieldId: 'u3' }, { tableId: 'orders', fieldId: 'o3' }),
+      createRelationship('r-c', { tableId: 'users', fieldId: 'u1' }, { tableId: 'orders', fieldId: 'o1' }),
+    ];
+    const paths = layoutRelationshipPaths(rels, byId);
+    const mids = rels.map((r) => paths.get(r.id)?.labelX).filter((x): x is number => x != null);
+    expect(mids).toHaveLength(3);
+    const sorted = [...mids].sort((a, b) => a - b);
+    expect(sorted[1]! - sorted[0]!).toBe(LANE_SPACING);
+    expect(sorted[2]! - sorted[1]!).toBe(LANE_SPACING);
+  });
+
+  it('staggers self-referential FKs on one table', () => {
+    const self = createTable('nodes', 'nodes', {
+      position: { x: 100, y: 100 },
+      fields: [
+        createField('n1', 'id', 'int4'),
+        createField('n2', 'parent_id', 'int4'),
+        createField('n3', 'manager_id', 'int4'),
+      ],
+    });
+    const rels = [
+      createRelationship('s1', { tableId: 'nodes', fieldId: 'n2' }, { tableId: 'nodes', fieldId: 'n1' }),
+      createRelationship('s2', { tableId: 'nodes', fieldId: 'n3' }, { tableId: 'nodes', fieldId: 'n1' }),
+    ];
+    const paths = layoutRelationshipPaths(rels, { nodes: self });
+    const g1 = paths.get('s1');
+    const g2 = paths.get('s2');
+    expect(g1).toBeTruthy();
+    expect(g2).toBeTruthy();
+    expect(g1!.labelX).not.toBe(g2!.labelX);
+    expect(Math.abs(g1!.labelX - g2!.labelX)).toBe(LANE_SPACING);
+  });
+
+  it('returns null when an endpoint table is missing', () => {
+    const rel = createRelationship('x', { tableId: 'users', fieldId: 'u1' }, { tableId: 'missing', fieldId: 'o1' });
+    expect(layoutRelationshipPaths([rel], byId).get('x')).toBeNull();
+  });
+});
+
+describe('orderRelsForPaint', () => {
+  it('moves active relationships to the end', () => {
+    const rels = [
+      createRelationship('a', { tableId: 't1', fieldId: 'f1' }, { tableId: 't2', fieldId: 'f2' }),
+      createRelationship('b', { tableId: 't1', fieldId: 'f1' }, { tableId: 't2', fieldId: 'f2' }),
+      createRelationship('c', { tableId: 't1', fieldId: 'f1' }, { tableId: 't2', fieldId: 'f2' }),
+    ];
+    const ordered = orderRelsForPaint(rels, 'b', 'c');
+    expect(ordered.map((r) => r.id)).toEqual(['a', 'b', 'c']);
   });
 });
 

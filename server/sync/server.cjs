@@ -21,7 +21,15 @@ const Y = require('yjs');
 const { setupWSConnection, setPersistence } = require(
   path.join(__dirname, '..', '..', 'node_modules', 'y-websocket', 'bin', 'utils.cjs'),
 );
-const { handleDbRoutes } = require(path.join(__dirname, '..', 'db-introspect', 'index.cjs'));
+const dbIntrospectPath = path.join(__dirname, '..', 'db-introspect', 'index.cjs');
+/** @type {typeof import('../db-introspect/index.cjs').handleDbRoutes | null} */
+let handleDbRoutes = null;
+function getHandleDbRoutes() {
+  if (!handleDbRoutes) {
+    ({ handleDbRoutes } = require(dbIntrospectPath));
+  }
+  return handleDbRoutes;
+}
 
 const PORT = Number(process.env.PORT || 1234);
 const DATABASE_URL =
@@ -168,7 +176,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST' && url.startsWith('/api/db/')) {
       const body = await readJsonBody(req);
       req.body = body;
-      if (await handleDbRoutes(req, res, url, req.method)) return;
+      if (await getHandleDbRoutes()(req, res, url, req.method)) return;
     }
     if (req.method === 'POST' && req.url === '/api/ai/generate-schema') {
       if (!OPENAI_API_KEY) {

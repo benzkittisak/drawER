@@ -2,20 +2,37 @@
 
 const { isEnabled, maxTables, DIALECTS } = require('./config.cjs');
 const { normalizeConnection } = require('./connection.cjs');
-const postgres = require('./postgres.cjs');
-const mysql = require('./mysql.cjs');
-const mssql = require('./mssql.cjs');
-const sqlite = require('./sqlite.cjs');
-const oracle = require('./oracle.cjs');
 
-const ADAPTERS = {
-  postgres,
-  mysql,
-  mariadb: mysql,
-  mssql,
-  sqlite,
-  oracle,
+/** @type {Record<string, string>} */
+const ADAPTER_MODULES = {
+  postgres: './postgres.cjs',
+  mysql: './mysql.cjs',
+  mssql: './mssql.cjs',
+  sqlite: './sqlite.cjs',
+  oracle: './oracle.cjs',
 };
+
+/** @type {Record<string, object>} */
+const adapterCache = {};
+
+function adapterFor(dialect) {
+  const key = dialect === 'mariadb' ? 'mysql' : dialect;
+  const modPath = ADAPTER_MODULES[key];
+  if (!modPath) throw new Error(`Unsupported dialect: ${dialect}`);
+  if (!adapterCache[key]) {
+    try {
+      adapterCache[key] = require(modPath);
+    } catch (err) {
+      if (err && typeof err === 'object' && err.code === 'MODULE_NOT_FOUND') {
+        throw new Error(
+          `Database driver for ${dialect} is not installed (${err.message}). Run bun install.`,
+        );
+      }
+      throw err;
+    }
+  }
+  return adapterCache[key];
+}
 
 function disabledResponse(res) {
   res.statusCode = 503;
@@ -33,12 +50,6 @@ function json(res, status, body) {
   res.end(JSON.stringify(body));
 }
 
-function adapterFor(dialect) {
-  const a = ADAPTERS[dialect];
-  if (!a) throw new Error(`Unsupported dialect: ${dialect}`);
-  return a;
-}
-
 function validateDialect(dialect) {
   if (!DIALECTS.includes(dialect)) {
     throw new Error(`dialect must be one of: ${DIALECTS.join(', ')}`);
@@ -52,7 +63,7 @@ async function handleDbConnect(req, res) {
   const dialect = String(body.dialect || '').toLowerCase();
   validateDialect(dialect);
   if (dialect === 'sqlite') {
-    return json(res, 200, await sqlite.connect());
+    return json(res, 200, await adapterFor('sqlite').connect());
   }
   const cfg = await normalizeConnection(dialect, body.connection);
   const result = await adapterFor(dialect).connect(cfg);
@@ -97,7 +108,7 @@ async function handleDbIntrospectSqlite(req, res) {
   if (buf.length > 50 * 1024 * 1024) {
     return json(res, 400, { error: 'SQLite file too large (max 50MB)' });
   }
-  const { neutral } = await sqlite.introspectBuffer(buf, body.filename, maxTables());
+  const { neutral } = await adapterFor('sqlite').introspectBuffer(buf, body.filename, maxTables());
   return json(res, 200, { neutral });
 }
 

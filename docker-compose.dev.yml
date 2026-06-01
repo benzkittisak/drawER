@@ -31,8 +31,11 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.dev
-    # Re-install when package.json changes — the anonymous node_modules volume can be stale after new deps (e.g. pg).
-    command: sh -c "bun install --frozen-lockfile && exec npx nodemon --legacy-watch --watch server server/sync/server.cjs"
+    # Re-install when package.json / bun.lock change — the anonymous node_modules volume can be stale after new deps.
+    command: >
+      sh -c "exec npx nodemon --legacy-watch
+      --watch server --watch package.json --watch bun.lock
+      --exec 'sh -c \"bun install --frozen-lockfile && node server/sync/server.cjs\"'"
     environment:
       PORT: '1234'
       DATABASE_URL: postgres://drawer:drawer@db:5432/drawer

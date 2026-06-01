@@ -442,7 +442,7 @@ button { font-family: inherit; cursor: pointer; }
   stroke-width: 14;
   cursor: pointer;
 }
-.rel-path-hit--active { stroke: transparent; }
+.rel-path-hit--active { stroke: transparent; stroke-width: 18; }
 .rel-dot { fill: var(--surface); stroke: var(--accent); stroke-width: 2; }
 .rel-dot--from { stroke: var(--ink-3); }
 .rel-marker { fill: none; stroke: var(--ink-3); stroke-width: 1.5; stroke-linecap: round; }
