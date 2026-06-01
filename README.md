@@ -7,7 +7,16 @@ syncs when you share a room.
 > Clean-room, commercial rebuild inspired by drawdb. Built with React 19 + Vite + TypeScript,
 > Yjs (CRDT) for real-time sync, and a custom canvas. No AGPL code.
 
-## Run with Docker (full stack)
+## Run with Docker — development (hot reload)
+```bash
+docker compose -f docker-compose.dev.yml up --build   # open http://localhost:5173
+```
+- **web** — Vite dev server with HMR (`:5173`); edits to `src/` reload instantly.
+- **sync** — Yjs server + SQLite, auto-restarted by nodemon on changes (`:1234`).
+- Source is bind-mounted; `node_modules` stays in the container. File watching uses polling so
+  HMR works through Docker bind mounts on Windows/WSL.
+
+## Run with Docker — production (full stack)
 ```bash
 docker compose up --build      # web on http://localhost:8080, sync+DB on :1234
 ```
