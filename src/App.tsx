@@ -1,11 +1,11 @@
 /**
- * App — top-level router across the three views, plus first-run seeding of the local library.
- * State-based routing (no URL router yet); per-diagram URLs arrive with sharing in M5/M6.
+ * App — top-level router across the three views. State-based routing (no URL router yet);
+ * a ?room=… link opens straight into that shared diagram. No demo content is injected — the
+ * library starts empty and fills with the user's real diagrams.
  */
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { createDiagram, newId } from '@core';
-import { listDiagrams, saveDiagram } from '@store';
-import { seedDiagram } from '@data/seedDiagram';
+import { saveDiagram } from '@store';
 import { Dashboard } from '@views/Dashboard';
 import { Editor } from '@views/Editor';
 import { History } from '@views/History';
@@ -19,13 +19,6 @@ export function App() {
   const [route, setRoute] = useState<Route>(ROOM_PARAM ? 'editor' : 'dashboard');
   const [openId, setOpenId] = useState<string | null>(ROOM_PARAM);
 
-  // Seed the demo diagram into the local library on first run so the app isn't empty.
-  const seeded = useRef(false);
-  if (!seeded.current) {
-    if (listDiagrams().length === 0) saveDiagram(seedDiagram());
-    seeded.current = true;
-  }
-
   const open = (id: string) => {
     setOpenId(id);
     setRoute('editor');
@@ -37,15 +30,16 @@ export function App() {
     open(d.id);
   };
 
-  if (route === 'dashboard') return <Dashboard onOpen={open} onNew={newDiagram} />;
   if (route === 'history') return <History onBack={() => setRoute('editor')} />;
-  const editorId = openId ?? 'core-product-db';
-  return (
-    <Editor
-      diagramId={editorId}
-      joinRoom={!!ROOM_PARAM && editorId === ROOM_PARAM}
-      onDashboard={() => setRoute('dashboard')}
-      onHistory={() => setRoute('history')}
-    />
-  );
+  if (route === 'editor' && openId) {
+    return (
+      <Editor
+        diagramId={openId}
+        joinRoom={!!ROOM_PARAM && openId === ROOM_PARAM}
+        onDashboard={() => setRoute('dashboard')}
+        onHistory={() => setRoute('history')}
+      />
+    );
+  }
+  return <Dashboard onOpen={open} onNew={newDiagram} />;
 }
