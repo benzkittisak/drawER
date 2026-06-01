@@ -3,10 +3,10 @@
  *
  *  - y-indexeddb: always-on local persistence (offline-first). On first open the doc is empty,
  *    so we populate it from the passed-in diagram; thereafter the CRDT state in IndexedDB wins.
- *  - y-websocket: attached lazily when the user shares a room; the SAME doc syncs up, so an
- *    offline diagram becomes a shared room with no migration step.
+ *  - y-websocket: connected on every diagram open (same room id `drawer-<diagramId>`) so anyone
+ *    on that diagram sees live edits and presence — no Share click required.
  *  - Y.UndoManager scoped to LOCAL_ORIGIN so each user undoes only their own edits.
- *  - Awareness: live cursors / selection / activity, only while connected to a room.
+ *  - Awareness: live cursors / selection / activity while the websocket is connected.
  *
  * Snapshots of the doc (plain `Diagram`) and presence (RemotePresence[]) are pushed to listeners
  * (the store). This is the only place that touches Yjs / y-protocols.
@@ -58,6 +58,7 @@ class CollabSession {
 
   private identity: PresenceUser | null = null;
   private roomId: string | null = null;
+  private readonly = false;
   private observer = (): void => this.scheduleFlush();
   private commentsObserver = (): void => {
     if (this.maps) this.onComments?.(readComments(this.maps));
@@ -65,9 +66,22 @@ class CollabSession {
   private activityObserver = (): void => {
     if (this.maps) this.onActivity?.(readActivity(this.maps));
   };
-  private awarenessHandler = (): void => {
+  /** Push the current remote awareness states into the store (also run once after connect). */
+  private flushPresence = (): void => {
     if (this.ws) this.onOthers?.(readOthers(this.ws.awareness));
   };
+
+  private wireWebsocket(provider: WebsocketProvider): void {
+    if (this.identity) setLocalUser(provider.awareness, this.identity);
+    provider.awareness.on('change', this.flushPresence);
+    provider.on('status', () => {
+      this.emitConnection();
+      if (provider.wsconnected) this.flushPresence();
+    });
+    provider.on('sync', (synced: boolean) => {
+      if (synced) this.flushPresence();
+    });
+  }
   private flushScheduled = false;
 
   /**
@@ -89,12 +103,11 @@ class CollabSession {
 
     // Always connect to the server (real DB-backed). Presence is active whenever connected.
     this.ws = new WebsocketProvider(SYNC_URL, `drawer-${diagram.id}`, doc, { connect: true });
-    if (this.identity) setLocalUser(this.ws.awareness, this.identity);
-    this.ws.awareness.on('change', this.awarenessHandler);
-    this.ws.on('status', () => this.emitConnection());
+    this.wireWebsocket(this.ws);
     await waitForSync(this.ws, 1200);
+    this.flushPresence();
 
-    if (isEmpty(maps)) {
+    if (isEmpty(maps) && !this.readonly) {
       doc.transact(() => writeDiagram(maps, diagram), 'load');
     }
 
@@ -131,18 +144,24 @@ class CollabSession {
     return this.maps ? readDiagram(this.maps) : null;
   }
 
+  setReadonly(flag: boolean): void {
+    this.readonly = flag;
+  }
+
   /** Run a mutation inside a transaction tagged as a local edit. */
   transact(fn: (maps: DocMaps) => void): void {
-    if (!this.doc || !this.maps) return;
+    if (this.readonly || !this.doc || !this.maps) return;
     const maps = this.maps;
     this.doc.transact(() => fn(maps), LOCAL_ORIGIN);
   }
 
   // ---- undo/redo ----
   undo(): void {
+    if (this.readonly) return;
     this.undoMgr?.undo();
   }
   redo(): void {
+    if (this.readonly) return;
     this.undoMgr?.redo();
   }
   canUndo(): boolean {
@@ -220,12 +239,19 @@ class CollabSession {
     if (!this.doc || !this.roomId) return '';
     if (!this.ws) {
       this.ws = new WebsocketProvider(SYNC_URL, `drawer-${this.roomId}`, this.doc, { connect: true });
-      if (this.identity) setLocalUser(this.ws.awareness, this.identity);
-      this.ws.awareness.on('change', this.awarenessHandler);
-      this.ws.on('status', () => this.emitConnection());
+      this.wireWebsocket(this.ws);
       this.emitConnection();
+      this.flushPresence();
     }
     return this.shareUrl(this.roomId);
+  }
+
+  /** Read-only iframe URL for embedding this diagram on another site. */
+  embedUrl(id?: string): string {
+    const room = id ?? this.roomId;
+    if (!room) return '';
+    const origin = typeof location !== 'undefined' ? location.origin : '';
+    return `${origin}/?embed=1&room=${encodeURIComponent(room)}`;
   }
 
   /** Go offline (stop syncing/presence) without closing the diagram. */
@@ -237,7 +263,7 @@ class CollabSession {
 
   private disconnect(): void {
     if (this.ws) {
-      this.ws.awareness.off('change', this.awarenessHandler);
+      this.ws.awareness.off('change', this.flushPresence);
       this.ws.destroy();
       this.ws = null;
     }
@@ -254,6 +280,7 @@ class CollabSession {
   }
 
   private teardown(): void {
+    this.readonly = false;
     if (this.maps) {
       this.maps.tables.unobserveDeep(this.observer);
       this.maps.rels.unobserveDeep(this.observer);

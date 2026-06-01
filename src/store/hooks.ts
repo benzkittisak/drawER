@@ -39,6 +39,16 @@ export function useRelationships(): Relationship[] {
   return useEditorStore((s) => s.diagram.relationships);
 }
 
+export function useRelationship(id: Id | null): Relationship | undefined {
+  return useEditorStore((s) => (id ? s.diagram.relationships.find((r) => r.id === id) : undefined));
+}
+
+export function useSelectedRel(): [Id | null, (id: Id | null) => void] {
+  const selectedRel = useEditorStore((s) => s.selectedRel);
+  const setSelectedRel = useEditorStore((s) => s.setSelectedRel);
+  return [selectedRel, setSelectedRel];
+}
+
 export function useDiagramMeta(): { name: string; dialect: Diagram['dialect'] } {
   return useEditorStore(useShallow((s) => ({ name: s.diagram.name, dialect: s.diagram.dialect })));
 }
@@ -55,11 +65,16 @@ export function useTool(): [Tool, (t: Tool) => void] {
   return [tool, setTool];
 }
 
+export function useReadonly(): boolean {
+  return useEditorStore((s) => s.readonly);
+}
+
 /** Write actions (stable references). */
 export function useEditorActions() {
   return useEditorStore(
     useShallow((s) => ({
       loadDiagram: s.loadDiagram,
+      setReadonly: s.setReadonly,
       renameDiagram: s.renameDiagram,
       addTable: s.addTable,
       updateTable: s.updateTable,
@@ -69,15 +84,30 @@ export function useEditorActions() {
       updateField: s.updateField,
       removeField: s.removeField,
       reorderField: s.reorderField,
+      addIndex: s.addIndex,
+      updateIndex: s.updateIndex,
+      removeIndex: s.removeIndex,
+      toggleFieldIndex: s.toggleFieldIndex,
       addRelationship: s.addRelationship,
+      updateRelationship: s.updateRelationship,
       deleteEntity: s.deleteEntity,
     })),
   );
 }
 
-export function useConnection(): { connection: ConnectionState; shareRoom: () => string; leaveRoom: () => void } {
+export function useConnection(): {
+  connection: ConnectionState;
+  shareRoom: () => string;
+  embedUrl: () => string;
+  leaveRoom: () => void;
+} {
   return useEditorStore(
-    useShallow((s) => ({ connection: s.connection, shareRoom: s.shareRoom, leaveRoom: s.leaveRoom })),
+    useShallow((s) => ({
+      connection: s.connection,
+      shareRoom: s.shareRoom,
+      embedUrl: s.embedUrl,
+      leaveRoom: s.leaveRoom,
+    })),
   );
 }
 
@@ -124,7 +154,8 @@ export function useRemoteCursors(): RemoteCursorView[] {
 }
 
 export interface CanvasPresence {
-  isShared: boolean;
+  /** Websocket session is up (diagram is on the live server room). */
+  isLive: boolean;
   peers: number;
   /** tableId → the presence user currently editing it (advisory lock). */
   locks: Record<string, { name: string; color: string }>;
@@ -167,7 +198,7 @@ export function useVersions(): {
 
 export function useCanvasPresence(): CanvasPresence {
   const others = useEditorStore((s) => s.others);
-  const isShared = useEditorStore((s) => s.connection.isShared);
+  const isLive = useEditorStore((s) => s.connection.status !== 'local');
   return useMemo(() => {
     const locks: Record<string, { name: string; color: string }> = {};
     for (const o of others) {
@@ -175,6 +206,6 @@ export function useCanvasPresence(): CanvasPresence {
         locks[o.activity.tableId] = { name: o.user.name, color: o.user.color };
       }
     }
-    return { isShared, peers: others.length, locks };
-  }, [others, isShared]);
+    return { isLive, peers: others.length, locks };
+  }, [others, isLive]);
 }

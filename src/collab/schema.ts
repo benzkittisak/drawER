@@ -72,7 +72,7 @@ function tableToY(t: Table): YMap {
   const fields = new Y.Array<unknown>();
   fields.push(t.fields.map(fieldToY));
   m.set('fields', fields);
-  m.set('indices', t.indices); // not edited in UI → plain JSON value
+  m.set('indices', t.indices);
   return m;
 }
 
@@ -155,6 +155,16 @@ const fieldArray = (t: YMap): YArr => t.get('fields') as YArr;
 const findFieldIndex = (fields: YArr, fieldId: string): number =>
   (fields.toArray() as YMap[]).findIndex((f) => f.get('id') === fieldId);
 
+const readIndices = (t: YMap): Index[] => ((t.get('indices') as Index[]) ?? []).map((i) => ({ ...i, fieldIds: [...i.fieldIds] }));
+const writeIndices = (t: YMap, indices: Index[]): void => {
+  t.set('indices', indices);
+};
+
+const pruneIndicesForField = (indices: Index[], fieldId: string): Index[] =>
+  indices
+    .map((ix) => ({ ...ix, fieldIds: ix.fieldIds.filter((id) => id !== fieldId) }))
+    .filter((ix) => ix.fieldIds.length > 0);
+
 export const mut = {
   setTablePosition(maps: DocMaps, id: string, x: number, y: number): void {
     const t = tableMap(maps, id);
@@ -170,7 +180,10 @@ export const mut = {
     if (!t) return;
     if (patch.name != null) t.set('name', patch.name);
     if (patch.color != null) t.set('color', patch.color);
-    if (patch.comment != null) t.set('comment', patch.comment);
+    if ('comment' in patch) {
+      if (patch.comment) t.set('comment', patch.comment);
+      else t.delete('comment');
+    }
     if (patch.schema != null) t.set('schema', patch.schema);
     if (patch.position) {
       t.set('x', patch.position.x);
@@ -200,9 +213,31 @@ export const mut = {
     const fields = fieldArray(t);
     const idx = findFieldIndex(fields, fieldId);
     if (idx >= 0) fields.delete(idx, 1);
+    writeIndices(t, pruneIndicesForField(readIndices(t), fieldId));
     for (const [rid, rm] of maps.rels.entries()) {
       if (rm.get('fromFieldId') === fieldId || rm.get('toFieldId') === fieldId) maps.rels.delete(rid);
     }
+  },
+  addIndex(maps: DocMaps, tableId: string, index: Index): void {
+    const t = tableMap(maps, tableId);
+    if (!t) return;
+    writeIndices(t, [...readIndices(t), index]);
+  },
+  updateIndex(maps: DocMaps, tableId: string, indexId: string, patch: Partial<Omit<Index, 'id'>>): void {
+    const t = tableMap(maps, tableId);
+    if (!t) return;
+    writeIndices(
+      t,
+      readIndices(t).map((ix) => (ix.id === indexId ? { ...ix, ...patch, fieldIds: patch.fieldIds ?? ix.fieldIds } : ix)),
+    );
+  },
+  removeIndex(maps: DocMaps, tableId: string, indexId: string): void {
+    const t = tableMap(maps, tableId);
+    if (!t) return;
+    writeIndices(
+      t,
+      readIndices(t).filter((ix) => ix.id !== indexId),
+    );
   },
   reorderField(maps: DocMaps, tableId: string, fieldId: string, toIndex: number): void {
     const t = tableMap(maps, tableId);
@@ -216,6 +251,18 @@ export const mut = {
   },
   addRelationship(maps: DocMaps, rel: Relationship): void {
     maps.rels.set(rel.id, relToY(rel));
+  },
+  updateRelationship(
+    maps: DocMaps,
+    id: string,
+    patch: Partial<Pick<Relationship, 'name' | 'cardinality' | 'onUpdate' | 'onDelete'>>,
+  ): void {
+    const rm = maps.rels.get(id);
+    if (!rm) return;
+    if (patch.name != null) rm.set('name', patch.name);
+    if (patch.cardinality != null) rm.set('cardinality', patch.cardinality);
+    if (patch.onUpdate != null) rm.set('onUpdate', patch.onUpdate);
+    if (patch.onDelete != null) rm.set('onDelete', patch.onDelete);
   },
   deleteEntity(maps: DocMaps, id: string): void {
     if (maps.tables.has(id)) {

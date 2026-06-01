@@ -2,7 +2,7 @@
  * ImportModal — paste SQL DDL or DBML and load it as the current diagram.
  * Uses the clean-room importers; surfaces parser warnings.
  */
-import { useState } from 'react';
+import { useRef, useState, type ChangeEvent } from 'react';
 import { dbmlToDiagram, DIALECT_LABELS, DIALECTS, importSql, parse, type DialectId } from '@core';
 import { useEditorActions } from '@store';
 import { Btn, Modal } from '@ui/atoms';
@@ -15,6 +15,21 @@ export function ImportModal({ onClose }: { onClose: () => void }) {
   const [dialect, setDialect] = useState<DialectId>('postgres');
   const [text, setText] = useState('');
   const [warnings, setWarnings] = useState<string[]>([]);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  // Read a picked file into the textarea; auto-select the source from its extension/content so a
+  // dropped `.drawdb.json` (e.g. an exported diagram or a converted schema) imports in one click.
+  const onPickFile = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    const content = await file.text();
+    setText(content);
+    setWarnings([]);
+    if (file.name.endsWith('.json') || /"app"\s*:\s*"drawDB-live"/.test(content)) setSource('json');
+    else if (file.name.endsWith('.dbml')) setSource('dbml');
+    else if (file.name.endsWith('.sql')) setSource('sql');
+  };
 
   const run = async () => {
     if (!text.trim()) return;
@@ -48,8 +63,18 @@ export function ImportModal({ onClose }: { onClose: () => void }) {
       foot={
         <>
           <span style={{ flex: 1, fontSize: 11.5, color: 'var(--ink-3)' }}>
-            Paste a CREATE TABLE script or DBML. Replaces the current diagram.
+            Paste or load a CREATE TABLE script, DBML, or a .drawdb.json. Replaces the current diagram.
           </span>
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".json,.sql,.dbml,.txt,application/json,text/plain"
+            style={{ display: 'none' }}
+            onChange={onPickFile}
+          />
+          <Btn icon="download" onClick={() => fileRef.current?.click()}>
+            Load file…
+          </Btn>
           <Btn variant="primary" icon="download" onClick={run}>
             Import
           </Btn>

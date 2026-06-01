@@ -46,8 +46,13 @@ export function TopBar({
   const { connection } = useConnection();
   const status = STATUS[connection.status];
   const online = [
-    { id: me.id, name: 'You', short: 'ME', color: me.color },
-    ...others.map((o) => ({ id: o.user.id, name: o.user.name, short: initials(o.user.name), color: o.user.color })),
+    { id: 'local', name: 'You', short: 'ME', color: me.color },
+    ...others.map((o) => ({
+      id: `peer-${o.clientId}`,
+      name: o.user.name,
+      short: initials(o.user.name),
+      color: o.user.color,
+    })),
   ];
   return (
     <div className="topbar">
@@ -76,7 +81,9 @@ export function TopBar({
         iconOnly
         variant="ghost"
         icon="table"
-        title="Toggle tables panel"
+        title={leftOpen ? 'Hide tables panel' : 'Show tables panel'}
+        aria-expanded={leftOpen}
+        aria-controls="editor-left-panel"
         onClick={onToggleLeft}
         style={leftOpen ? activeToggle : undefined}
       />
@@ -87,7 +94,9 @@ export function TopBar({
         iconOnly
         variant="ghost"
         icon="users"
-        title="Toggle collaboration panel"
+        title={rightOpen ? 'Hide collaboration panel' : 'Show collaboration panel'}
+        aria-expanded={rightOpen}
+        aria-controls="editor-right-panel"
         onClick={onToggleRight}
         style={rightOpen ? activeToggle : undefined}
       />

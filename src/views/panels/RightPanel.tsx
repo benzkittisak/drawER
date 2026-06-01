@@ -2,12 +2,14 @@
  * RightPanel — table editor (when a table is selected) + collaboration: People / Comments / Activity.
  */
 import { useEffect, useState } from 'react';
-import { useActivity, useComments, useConnection, useIdentity, useOthers, useSelection } from '@store';
-import { Icon } from '@ui/Icon';
+import { useActivity, useComments, useConnection, useIdentity, useOthers, useSelectedRel, useSelection } from '@store';
+import { Icon, type IconName } from '@ui/Icon';
 import { Avatar, Btn } from '@ui/atoms';
+import { AddRelationshipModal } from './AddRelationshipModal';
+import { RelationshipEditorPanel } from './RelationshipEditorPanel';
 import { TableEditorPanel } from './TableEditorPanel';
 
-type Tab = 'table' | 'people' | 'comments' | 'activity';
+type Tab = 'table' | 'link' | 'people' | 'comments' | 'activity';
 
 const initials = (n: string): string =>
   n.split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase() || 'NA';
@@ -20,9 +22,48 @@ const relTime = (ts: number): string => {
   return `${Math.floor(s / 86400)}d`;
 };
 
-export function RightPanel({ onOpenComment, onShare }: { onOpenComment: (id: string) => void; onShare: () => void }) {
+function TabBtn({
+  active,
+  title,
+  icon,
+  badge,
+  onClick,
+}: {
+  active: boolean;
+  title: string;
+  icon: IconName;
+  badge?: number;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className={'ptab ptab--icon' + (active ? ' active' : '')}
+      title={title}
+      aria-label={title}
+      aria-current={active ? 'page' : undefined}
+      onClick={onClick}
+    >
+      <Icon name={icon} size={17} />
+      {badge != null && badge > 0 && <span className="ptab__badge">{badge > 99 ? '99+' : badge}</span>}
+    </button>
+  );
+}
+
+export function RightPanel({
+  onOpenComment,
+  onShare,
+  focusCommentsKey = 0,
+}: {
+  onOpenComment: (id: string) => void;
+  onShare: () => void;
+  /** Increment to switch to the Comments tab (e.g. after placing a pin). */
+  focusCommentsKey?: number;
+}) {
   const [tab, setTab] = useState<Tab>('people');
+  const [addRelOpen, setAddRelOpen] = useState(false);
   const [selected, setSelected] = useSelection();
+  const [selectedRel, setSelectedRel] = useSelectedRel();
   const me = useIdentity();
   const others = useOthers();
   const comments = useComments();
@@ -31,42 +72,61 @@ export function RightPanel({ onOpenComment, onShare }: { onOpenComment: (id: str
   const open = comments.filter((c) => !c.resolved);
 
   useEffect(() => {
-    if (selected) setTab('table');
-  }, [selected]);
+    if (selectedRel) setTab('link');
+    else if (selected) setTab('table');
+  }, [selected, selectedRel]);
+
+  useEffect(() => {
+    if (focusCommentsKey > 0) setTab('comments');
+  }, [focusCommentsKey]);
 
   return (
     <div className="panel panel--right">
-      <div className="panel__tabs">
-        <button className={'ptab' + (tab === 'table' ? ' active' : '')} onClick={() => setTab('table')}>
-          <Icon name="table" size={15} />
-          Table
-        </button>
-        <button className={'ptab' + (tab === 'people' ? ' active' : '')} onClick={() => setTab('people')}>
-          <Icon name="users" size={15} />
-          People
-          <span className="badge">{others.length + 1}</span>
-        </button>
-        <button className={'ptab' + (tab === 'comments' ? ' active' : '')} onClick={() => setTab('comments')}>
-          <Icon name="comment" size={15} />
-          Comments
-          <span className="badge">{open.length}</span>
-        </button>
-        <button className={'ptab' + (tab === 'activity' ? ' active' : '')} onClick={() => setTab('activity')}>
-          <Icon name="activity" size={15} />
-          Activity
-        </button>
+      <div className="panel__tabs panel__tabs--icons">
+        <div className="panel__tabs-group" role="tablist" aria-label="Schema">
+          <TabBtn active={tab === 'table'} title="Table" icon="table" onClick={() => setTab('table')} />
+          <TabBtn active={tab === 'link'} title="Link / relationship" icon="link" onClick={() => setTab('link')} />
+        </div>
+        <div className="panel__tabs-sep" aria-hidden />
+        <div className="panel__tabs-group" role="tablist" aria-label="Collaboration">
+          <TabBtn active={tab === 'people'} title="People" icon="users" badge={others.length + 1} onClick={() => setTab('people')} />
+          <TabBtn active={tab === 'comments'} title="Comments" icon="comment" badge={open.length} onClick={() => setTab('comments')} />
+          <TabBtn active={tab === 'activity'} title="Activity" icon="activity" onClick={() => setTab('activity')} />
+        </div>
       </div>
 
       {tab === 'table' && (
         <div className="panel__body">
           {selected ? (
-            <TableEditorPanel tableId={selected} onDeleted={() => setSelected(null)} />
+            <TableEditorPanel
+              tableId={selected}
+              onDeleted={() => setSelected(null)}
+              onAddForeignKey={() => setAddRelOpen(true)}
+            />
           ) : (
-            <div style={{ padding: '12px 4px', color: 'var(--ink-3)', fontSize: 13, lineHeight: 1.55 }}>
-              Click a table on the canvas to edit its name, color, and fields here.
-            </div>
+            <div className="te-empty te-empty--pad">Click a table on the canvas to edit name, columns, and indexes.</div>
           )}
         </div>
+      )}
+
+      {tab === 'link' && (
+        <>
+          <div className="panel__head" style={{ padding: '8px 10px 4px' }}>
+            <span className="panel__title">Relationship</span>
+            <Btn sm variant="primary" icon="plus" onClick={() => setAddRelOpen(true)}>
+              Add
+            </Btn>
+          </div>
+          <div className="panel__body" style={{ paddingTop: 4 }}>
+            {selectedRel ? (
+              <RelationshipEditorPanel relId={selectedRel} onDeleted={() => setSelectedRel(null)} />
+            ) : (
+              <div className="te-empty te-empty--pad">
+                Select a line on the canvas, use <b>Add</b> to link tables without dragging, or open Relations on the left.
+              </div>
+            )}
+          </div>
+        </>
       )}
 
       {tab === 'people' && (
@@ -100,9 +160,15 @@ export function RightPanel({ onOpenComment, onShare }: { onOpenComment: (id: str
               />
             </div>
           ))}
-          {!connection.isShared && (
+          {connection.status === 'local' && (
             <div style={{ padding: '14px 8px', fontSize: 12.5, color: 'var(--ink-3)', lineHeight: 1.5 }}>
-              You're working solo. <button className="btn btn--ghost btn--sm" style={{ padding: '0 6px' }} onClick={onShare}>Start a live session</button> to collaborate in real time.
+              Offline — reconnect with <b>Share</b> or check that the sync server is running.
+            </div>
+          )}
+          {connection.status !== 'local' && others.length === 0 && (
+            <div style={{ padding: '14px 8px', fontSize: 12.5, color: 'var(--ink-3)', lineHeight: 1.5 }}>
+              Only you here. Anyone who opens this same diagram (same link or dashboard card) appears
+              automatically — send them the URL from <b>Share</b> if needed.
             </div>
           )}
         </div>
@@ -111,9 +177,7 @@ export function RightPanel({ onOpenComment, onShare }: { onOpenComment: (id: str
       {tab === 'comments' && (
         <div className="panel__body">
           {comments.length === 0 && (
-            <div style={{ padding: '12px 10px', color: 'var(--ink-3)', fontSize: 13 }}>
-              No comments yet — pick the comment tool and click the canvas to pin one.
-            </div>
+            <div className="te-empty te-empty--pad">No comments yet — pick the comment tool and click the canvas to pin one.</div>
           )}
           {comments.map((c) => (
             <div key={c.id} className="thread" onClick={() => onOpenComment(c.id)}>
@@ -139,9 +203,7 @@ export function RightPanel({ onOpenComment, onShare }: { onOpenComment: (id: str
 
       {tab === 'activity' && (
         <div className="panel__body">
-          {activity.length === 0 && (
-            <div style={{ padding: '12px 10px', color: 'var(--ink-3)', fontSize: 13 }}>No activity yet.</div>
-          )}
+          {activity.length === 0 && <div className="te-empty te-empty--pad">No activity yet.</div>}
           {activity.map((a, i) => (
             <div key={a.id} className="act">
               <div className="act__rail">
@@ -158,6 +220,7 @@ export function RightPanel({ onOpenComment, onShare }: { onOpenComment: (id: str
           ))}
         </div>
       )}
+      {addRelOpen && <AddRelationshipModal fromTableId={selected ?? undefined} onClose={() => setAddRelOpen(false)} />}
     </div>
   );
 }

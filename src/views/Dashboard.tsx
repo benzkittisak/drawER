@@ -1,9 +1,10 @@
 /**
  * Dashboard — the diagram library. Lists diagrams from the server database (GET /api/diagrams)
  * and falls back to the local store (localStorage) when the server is unreachable (offline).
+ * Refreshes from PostgreSQL on mount (page load / return from editor).
  */
-import { useEffect, useMemo, useState } from 'react';
-import { listDiagrams, useIdentity, type DiagramSummary } from '@store';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { deleteDiagram, refreshDiagramLibrary, useIdentity, type DiagramSummary } from '@store';
 import { DIALECT_LABELS, type DialectId } from '@core';
 import { Icon } from '@ui/Icon';
 import { Avatar, Btn } from '@ui/atoms';
@@ -15,9 +16,6 @@ interface MeUser {
   short: string;
   color: string;
 }
-
-// REST base derived from the sync URL (ws://host -> http://host, wss -> https).
-const API_URL = ((import.meta.env.VITE_SYNC_URL as string) || 'ws://localhost:1234').replace(/^ws/, 'http');
 
 function relativeTime(ms: number): string {
   const s = Math.max(0, Math.floor((Date.now() - ms) / 1000));
@@ -57,10 +55,34 @@ function Thumb({ colors }: { colors: string[] }) {
   );
 }
 
-function Card({ d, me, onOpen }: { d: DiagramSummary; me: MeUser; onOpen: () => void }) {
+function Card({
+  d,
+  me,
+  onOpen,
+  onDelete,
+}: {
+  d: DiagramSummary;
+  me: MeUser;
+  onOpen: () => void;
+  onDelete: () => void;
+}) {
   const dbLabel = DIALECT_LABELS[d.dialect as DialectId] ?? d.dialect;
   return (
     <div className="card" onClick={onOpen}>
+      <div className="card__delete" onClick={(e) => e.stopPropagation()}>
+        <Btn
+          iconOnly
+          sm
+          variant="ghost"
+          icon="trash"
+          title="Delete diagram"
+          style={{ background: 'var(--surface)', boxShadow: 'var(--shadow-sm)' }}
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete();
+          }}
+        />
+      </div>
       <Thumb colors={d.colors} />
       <div className="card__body">
         <div className="card__name">{d.name}</div>
@@ -94,32 +116,46 @@ export function Dashboard({ onOpen, onNew }: DashboardProps) {
   const [creditsOpen, setCreditsOpen] = useState(false);
   const identity = useIdentity();
   const me: MeUser = { id: identity.id, name: 'You', short: 'ME', color: identity.color };
-  const [remote, setRemote] = useState<DiagramSummary[] | null>(null);
+  const [all, setAll] = useState<DiagramSummary[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [offline, setOffline] = useState(false);
 
-  // Fetch the real list from the server DB; null = offline → fall back to the local store.
-  useEffect(() => {
-    let active = true;
-    fetch(`${API_URL}/api/diagrams`)
-      .then((r) => r.json())
-      .then((rows: { id: string; name: string; dialect: string; tableCount: number; updatedAt: number }[]) => {
-        if (active)
-          setRemote(rows.map((r) => ({ id: r.id, name: r.name, dialect: r.dialect, tableCount: r.tableCount, colors: [], updatedAt: r.updatedAt })));
+  const loadLibrary = useCallback(() => {
+    setLoading(true);
+    void refreshDiagramLibrary()
+      .then((r) => {
+        setAll(r.diagrams);
+        setOffline(!r.serverReachable);
       })
-      .catch(() => active && setRemote(null));
-    return () => {
-      active = false;
-    };
+      .catch((e) => {
+        console.error('Dashboard library load failed', e);
+        setOffline(true);
+      })
+      .finally(() => setLoading(false));
   }, []);
 
-  // Merge: server is the source of truth; keep local-only diagrams + local thumbnail colors.
-  const all = useMemo(() => {
-    const byId = new Map<string, DiagramSummary>();
-    for (const d of listDiagrams()) byId.set(d.id, d);
-    if (remote) for (const d of remote) byId.set(d.id, { ...d, colors: byId.get(d.id)?.colors ?? d.colors });
-    return [...byId.values()].sort((a, b) => b.updatedAt - a.updatedAt);
-  }, [remote]);
+  useEffect(() => {
+    loadLibrary();
+  }, [loadLibrary]);
 
   const shown = useMemo(() => all.filter((d) => d.name.toLowerCase().includes(q.toLowerCase())), [all, q]);
+
+  const removeDiagram = async (d: DiagramSummary) => {
+    if (!window.confirm(`Delete "${d.name}"? This cannot be undone.`)) return;
+    const ok = await deleteDiagram(d.id);
+    if (!ok) {
+      window.alert('Could not delete on the server. Check that sync is running and try again.');
+      return;
+    }
+    setAll((list) => list.filter((x) => x.id !== d.id));
+    loadLibrary();
+  };
+
+  const subtitle = loading
+    ? 'Loading…'
+    : offline
+      ? `${all.length} ${all.length === 1 ? 'diagram' : 'diagrams'} (offline — refresh when sync is up)`
+      : `${all.length} ${all.length === 1 ? 'diagram' : 'diagrams'}`;
 
   return (
     <div className="dash">
@@ -146,9 +182,7 @@ export function Dashboard({ onOpen, onNew }: DashboardProps) {
         <div className="dash__hero">
           <div>
             <div className="dash__h1">Your workspace</div>
-            <div className="dash__sub">
-              {all.length} {all.length === 1 ? 'diagram' : 'diagrams'} · local-first · synced when shared
-            </div>
+            <div className="dash__sub">{subtitle}</div>
           </div>
           <Btn variant="primary" icon="plus" onClick={onNew}>
             New diagram
@@ -157,7 +191,7 @@ export function Dashboard({ onOpen, onNew }: DashboardProps) {
 
         <div className="grid">
           {shown.map((d) => (
-            <Card key={d.id} d={d} me={me} onOpen={() => onOpen(d.id)} />
+            <Card key={d.id} d={d} me={me} onOpen={() => onOpen(d.id)} onDelete={() => removeDiagram(d)} />
           ))}
           <div className="card card--new" onClick={onNew}>
             <div style={{ textAlign: 'center' }}>
