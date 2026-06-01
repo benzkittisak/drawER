@@ -26,17 +26,22 @@ See `docs/adr/` for rationale.
 
 ## Commands
 
+Package manager is **Bun** (`bun.lock`). Run scripts with `bun run …`. Use **`bun run test`** (Vitest),
+not `bun test` (Bun's own test runner).
+
 ```bash
-npm run dev         # http://localhost:5173
-npm run build       # tsc -b && vite build
-npm test            # Vitest (unit + golden-file SQL tests)
-npm run typecheck
-npm run lint
-npm run depcruise   # import boundaries — must pass
-npm run format
+bun install         # install dependencies
+bun run dev         # http://localhost:5173
+bun run build       # tsc -b && vite build
+bun run test        # Vitest (unit + golden-file SQL tests)
+bun run typecheck
+bun run lint
+bun run depcruise   # import boundaries — must pass
+bun run format
+bun run sync        # Yjs server + Postgres (ws+http on :1234)
 ```
 
-**Before finishing a change:** run `typecheck`, `lint`, `depcruise`, `test`, `build` (same bar as `CLAUDE.md`).
+**Before finishing a change:** run `bun run typecheck`, `bun run lint`, `bun run depcruise`, `bun run test`, `bun run build` (same bar as `CLAUDE.md`).
 
 ## Module boundaries (`src/`)
 

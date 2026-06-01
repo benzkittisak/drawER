@@ -34,4 +34,4 @@ export function parse(json: unknown): Diagram;     // throws on invalid; migrate
 - An older-version fixture loads via `migrate()`.
 
 ## How to verify
-`npm test`; `npm run dev` → Export JSON, re-import, confirm identical diagram.
+`bun run test`; `bun run dev` → Export JSON, re-import, confirm identical diagram.

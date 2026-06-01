@@ -3,6 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "packageManager": "bun@1.3.13",
   "description": "drawDB Live — real-time collaborative ER database-diagram editor (clean-room).",
   "scripts": {
     "dev": "vite",
@@ -14,12 +15,14 @@
     "typecheck": "tsc --noEmit",
     "depcruise": "depcruise src --config .dependency-cruiser.cjs",
     "format": "prettier --write .",
-    "sync": "node server/sync/server.cjs"
+    "sync": "node server/sync/server.cjs",
+    "reset:db": "docker compose -f docker-compose.dev.yml down -v"
   },
   "dependencies": {
     "@dbml/core": "^8.2.4",
     "dagre": "^0.8.5",
     "node-sql-parser": "^5.4.0",
+    "pg": "^8.21.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "y-indexeddb": "^9.0.12",
@@ -32,6 +35,7 @@
     "@eslint/js": "^9.17.0",
     "@types/dagre": "^0.7.54",
     "@types/node": "^22.10.0",
+    "@types/pg": "^8.20.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.3.4",

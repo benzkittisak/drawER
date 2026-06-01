@@ -1,94 +1,257 @@
 /**
  * drawER sync + storage server.
  *
- * A Yjs WebSocket server (y-websocket's setupWSConnection) whose documents are persisted to a
- * real **SQLite** database via Node's built-in `node:sqlite` (no native npm deps). Every diagram
- * is a room named `drawer-<id>`; its Yjs document is loaded from / saved to the `docs` table, so
- * diagram data lives server-side and survives across devices. No auth — anyone with the id/link
- * can open a diagram (per product decision).
+ * Yjs WebSocket server (y-websocket's setupWSConnection) with PostgreSQL persistence.
+ * Every diagram is a room named `drawer-<id>`; its Yjs document is loaded from / saved to
+ * the `docs` table. Also exposes `GET /api/diagrams` and `DELETE /api/diagrams/:id`.
  *
- * Also exposes `GET /api/diagrams` returning the list of stored diagrams (for the Dashboard).
- *
- * Run:  npm run sync     (ws + http on :1234; override with PORT / DB_PATH)
- * The client points at it via VITE_SYNC_URL (defaults to ws://localhost:1234).
+ * Run:  bun run sync     (ws + http on :1234)
+ * Env:  PORT, DATABASE_URL (default postgres://drawer:drawer@localhost:5432/drawer)
+ *        OPENAI_API_KEY (optional — enables POST /api/ai/generate-schema)
+ *        OPENAI_MODEL (default gpt-4o-mini), OPENAI_BASE_URL (default https://api.openai.com/v1)
  */
 const http = require('node:http');
 const path = require('node:path');
-const { DatabaseSync } = require('node:sqlite');
+const { Pool } = require('pg');
 const { WebSocketServer } = require('ws');
 const Y = require('yjs');
 
-// y-websocket's server utils aren't exposed via package "exports"; require the file directly.
 const { setupWSConnection, setPersistence } = require(
   path.join(__dirname, '..', '..', 'node_modules', 'y-websocket', 'bin', 'utils.cjs'),
 );
 
 const PORT = Number(process.env.PORT || 1234);
-const DB_PATH = process.env.DB_PATH || path.join(__dirname, 'drawer.sqlite');
+const DATABASE_URL =
+  process.env.DATABASE_URL || 'postgres://drawer:drawer@localhost:5432/drawer';
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
+const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+const OPENAI_BASE_URL = (process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '');
 
-const db = new DatabaseSync(DB_PATH);
-db.exec(`
-  CREATE TABLE IF NOT EXISTS docs (
-    name        TEXT PRIMARY KEY,
-    data        BLOB,
-    displayName TEXT,
-    dialect     TEXT,
-    tableCount  INTEGER,
-    updatedAt   INTEGER
-  )
-`);
-const loadStmt = db.prepare('SELECT data FROM docs WHERE name = ?');
-const upsertStmt = db.prepare(`
-  INSERT INTO docs (name, data, displayName, dialect, tableCount, updatedAt)
-  VALUES (?, ?, ?, ?, ?, ?)
-  ON CONFLICT(name) DO UPDATE SET
-    data = excluded.data, displayName = excluded.displayName,
-    dialect = excluded.dialect, tableCount = excluded.tableCount, updatedAt = excluded.updatedAt
-`);
-const listStmt = db.prepare(
-  'SELECT name, displayName, dialect, tableCount, updatedAt FROM docs WHERE tableCount > 0 ORDER BY updatedAt DESC',
-);
-
+const pool = new Pool({ connectionString: DATABASE_URL });
 const timers = new Map();
 
-function persist(docName, ydoc) {
+async function initDb() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS docs (
+      name        TEXT PRIMARY KEY,
+      data        BYTEA,
+      display_name TEXT,
+      dialect     TEXT,
+      table_count INTEGER,
+      updated_at  BIGINT
+    )
+  `);
+}
+
+async function loadDoc(name) {
+  const res = await pool.query('SELECT data FROM docs WHERE name = $1', [name]);
+  return res.rows[0] ?? null;
+}
+
+async function persist(docName, ydoc) {
   const update = Y.encodeStateAsUpdate(ydoc);
   const meta = ydoc.getMap('meta');
   const displayName = meta.get('name') || 'Untitled diagram';
   const dialect = meta.get('dialect') || 'postgres';
   const tableCount = ydoc.getMap('tables').size;
-  upsertStmt.run(docName, update, displayName, dialect, tableCount, Date.now());
+  await pool.query(
+    `INSERT INTO docs (name, data, display_name, dialect, table_count, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6)
+     ON CONFLICT (name) DO UPDATE SET
+       data = EXCLUDED.data,
+       display_name = EXCLUDED.display_name,
+       dialect = EXCLUDED.dialect,
+       table_count = EXCLUDED.table_count,
+       updated_at = EXCLUDED.updated_at`,
+    [docName, Buffer.from(update), displayName, dialect, tableCount, Date.now()],
+  );
 }
 
 function schedulePersist(docName, ydoc) {
   clearTimeout(timers.get(docName));
-  timers.set(docName, setTimeout(() => persist(docName, ydoc), 600));
+  timers.set(
+    docName,
+    setTimeout(() => {
+      persist(docName, ydoc).catch((err) => console.error('persist failed', docName, err));
+    }, 600),
+  );
 }
 
 setPersistence({
   provider: null,
   bindState: async (docName, ydoc) => {
-    const row = loadStmt.get(docName);
-    if (row && row.data) Y.applyUpdate(ydoc, new Uint8Array(row.data));
+    const row = await loadDoc(docName);
+    if (row?.data) Y.applyUpdate(ydoc, new Uint8Array(row.data));
     ydoc.on('update', () => schedulePersist(docName, ydoc));
+    schedulePersist(docName, ydoc);
   },
   writeState: async (docName, ydoc) => {
-    persist(docName, ydoc);
+    await persist(docName, ydoc);
   },
 });
 
-const server = http.createServer((req, res) => {
+function setCors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  if (req.method === 'GET' && (req.url === '/api/diagrams' || req.url.startsWith('/api/diagrams?'))) {
-    const rows = listStmt.all().map((r) => ({
-      id: String(r.name).replace(/^drawer-/, ''),
-      name: r.displayName,
-      dialect: r.dialect,
-      tableCount: r.tableCount,
-      updatedAt: r.updatedAt,
-    }));
-    res.setHeader('Content-Type', 'application/json');
-    res.end(JSON.stringify(rows));
+  res.setHeader('Access-Control-Allow-Methods', 'GET, PUT, DELETE, POST, OPTIONS');
+  res.setHeader('Access-Control-Max-Age', '86400');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+}
+
+function stripSqlFences(text) {
+  return String(text)
+    .replace(/^```(?:sql)?\s*\r?\n?/i, '')
+    .replace(/\r?\n?```\s*$/i, '')
+    .trim();
+}
+
+/** @returns {Promise<string>} */
+async function generateSchemaSql(prompt, dialect) {
+  const system = [
+    `You are a database schema assistant.`,
+    `Output ONLY valid ${dialect} SQL DDL: CREATE TABLE statements and ALTER TABLE ... ADD CONSTRAINT for foreign keys.`,
+    `No markdown fences, no explanations, no prose before or after the SQL.`,
+  ].join(' ');
+  const res = await fetch(`${OPENAI_BASE_URL}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${OPENAI_API_KEY}`,
+    },
+    body: JSON.stringify({
+      model: OPENAI_MODEL,
+      messages: [
+        { role: 'system', content: system },
+        { role: 'user', content: prompt },
+      ],
+      temperature: 0.2,
+    }),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    const msg = data?.error?.message || `OpenAI request failed (${res.status})`;
+    throw new Error(msg);
+  }
+  const content = data?.choices?.[0]?.message?.content;
+  if (!content || typeof content !== 'string') {
+    throw new Error('OpenAI returned no SQL content');
+  }
+  return stripSqlFences(content);
+}
+
+function readJsonBody(req) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    req.on('data', (c) => chunks.push(c));
+    req.on('end', () => {
+      try {
+        resolve(chunks.length ? JSON.parse(Buffer.concat(chunks).toString('utf8')) : {});
+      } catch (e) {
+        reject(e);
+      }
+    });
+    req.on('error', reject);
+  });
+}
+
+const server = http.createServer(async (req, res) => {
+  setCors(res);
+  if (req.method === 'OPTIONS') {
+    res.statusCode = 204;
+    res.end();
+    return;
+  }
+  try {
+    if (req.method === 'POST' && req.url === '/api/ai/generate-schema') {
+      if (!OPENAI_API_KEY) {
+        res.statusCode = 503;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ error: 'AI not configured. Set OPENAI_API_KEY on the sync server.' }));
+        return;
+      }
+      const body = await readJsonBody(req);
+      const prompt = String(body.prompt || '').trim();
+      const dialect = String(body.dialect || 'postgres');
+      if (!prompt) {
+        res.statusCode = 400;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ error: 'prompt is required' }));
+        return;
+      }
+      try {
+        const sql = await generateSchemaSql(prompt, dialect);
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ sql }));
+      } catch (err) {
+        console.error('AI generate-schema failed', err);
+        res.statusCode = 502;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
+      }
+      return;
+    }
+    if (req.method === 'GET' && (req.url === '/api/diagrams' || req.url.startsWith('/api/diagrams?'))) {
+      const result = await pool.query(
+        `SELECT name, display_name, dialect, table_count, updated_at
+         FROM docs ORDER BY updated_at DESC`,
+      );
+      const rows = result.rows.map((r) => ({
+        id: String(r.name).replace(/^drawer-/, ''),
+        name: r.display_name,
+        dialect: r.dialect,
+        tableCount: r.table_count,
+        updatedAt: Number(r.updated_at),
+      }));
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify(rows));
+      return;
+    }
+    const idMatch = req.url?.match(/^\/api\/diagrams\/([^/?]+)$/);
+    if (req.method === 'PUT' && idMatch) {
+      const body = await readJsonBody(req);
+      const docName = `drawer-${idMatch[1]}`;
+      const displayName = body.name || 'Untitled diagram';
+      const dialect = body.dialect || 'postgres';
+      const tableCount = Number.isFinite(body.tableCount) ? body.tableCount : 0;
+      const updatedAt = Number.isFinite(body.updatedAt) ? body.updatedAt : Date.now();
+      const data = body.state ? Buffer.from(body.state, 'base64') : null;
+      if (data) {
+        await pool.query(
+          `INSERT INTO docs (name, data, display_name, dialect, table_count, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6)
+           ON CONFLICT (name) DO UPDATE SET
+             data = EXCLUDED.data,
+             display_name = EXCLUDED.display_name,
+             dialect = EXCLUDED.dialect,
+             table_count = EXCLUDED.table_count,
+             updated_at = EXCLUDED.updated_at`,
+          [docName, data, displayName, dialect, tableCount, updatedAt],
+        );
+      } else {
+        await pool.query(
+          `INSERT INTO docs (name, data, display_name, dialect, table_count, updated_at)
+           VALUES ($1, NULL, $2, $3, $4, $5)
+           ON CONFLICT (name) DO UPDATE SET
+             display_name = EXCLUDED.display_name,
+             dialect = EXCLUDED.dialect,
+             table_count = EXCLUDED.table_count,
+             updated_at = EXCLUDED.updated_at`,
+          [docName, displayName, dialect, tableCount, updatedAt],
+        );
+      }
+      res.statusCode = 204;
+      res.end();
+      return;
+    }
+    if (req.method === 'DELETE' && idMatch) {
+      await pool.query('DELETE FROM docs WHERE name = $1', [`drawer-${idMatch[1]}`]);
+      res.statusCode = 204;
+      res.end();
+      return;
+    }
+  } catch (err) {
+    console.error('HTTP error', err);
+    res.statusCode = 500;
+    res.end('Internal error');
     return;
   }
   res.statusCode = 404;
@@ -101,6 +264,19 @@ server.on('upgrade', (req, socket, head) => {
   wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));
 });
 
-server.listen(PORT, () => {
-  console.log(`drawER server running — ws + http://localhost:${PORT}  (db: ${DB_PATH})`);
+async function main() {
+  await initDb();
+  server.listen(PORT, () => {
+    const safeUrl = DATABASE_URL.replace(/:[^:@/]+@/, ':****@');
+    console.log(`drawER server running — ws + http://localhost:${PORT}  (db: ${safeUrl})`);
+  });
+}
+
+main().catch((err) => {
+  console.error('Failed to start drawER server:', err);
+  process.exit(1);
+});
+
+process.on('SIGTERM', () => {
+  void pool.end().finally(() => process.exit(0));
 });

@@ -1,5 +1,5 @@
-# Development image (hot reload). Node 24 (for the sync server's node:sqlite) + Bun (the package
-# manager). Installs the full dependency set with Bun; source is bind-mounted at runtime
+# Development image (hot reload). Node 24 (sync server) + Bun (package manager). Installs deps
+# with Bun; source is bind-mounted at runtime
 # (docker-compose.dev.yml) while node_modules stays in an anonymous volume.
 # Used for BOTH services: web runs `bun run dev` (Vite HMR), sync runs nodemon → node.
 FROM node:24-alpine

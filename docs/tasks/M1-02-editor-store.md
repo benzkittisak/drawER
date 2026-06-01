@@ -42,4 +42,4 @@ export function useEditorActions(): {
 - `commitDrag` exists as a distinct action (M5 maps drag-move→awareness, drag-end→transaction).
 
 ## How to verify
-`npm run typecheck && npm run lint && npm run depcruise && npm test`
+`bun run typecheck && bun run lint && bun run depcruise && bun run test`
