@@ -28,7 +28,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.dev
-    command: npm run dev -- --host --port 5173
+    command: bun run dev -- --host --port 5173
     environment:
       # Make Vite's file watcher poll the bind mount (reliable HMR on Windows/WSL).
       CHOKIDAR_USEPOLLING: 'true'

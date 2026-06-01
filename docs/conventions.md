@@ -3,13 +3,18 @@
 Rules every contributor (human or agent) follows. Most are enforced mechanically — a violation
 fails `lint`, `typecheck`, or `depcruise`, not just review.
 
+## Tooling
+- **Bun** is the package manager (lockfile `bun.lock`; commit it, never `package-lock.json`).
+  Run scripts with `bun run <script>`. Use `bun run test` (Vitest), not `bun test` (Bun's runner).
+- The sync server runs on **Node** (it uses `node:sqlite`); local dev needs both Bun and Node.
+
 ## Language & style
 - **TypeScript `strict`**, no `any` (`@typescript-eslint/no-explicit-any` is an error). Prefer
   precise types and discriminated unions over casts.
 - **Named exports** only (no default exports) so symbols are greppable and renames are safe.
 - **One component per file**; file name matches the component (`TableNode.tsx` → `TableNode`).
 - Prettier owns formatting: single quotes, semicolons, trailing commas, width 100. Run
-  `npm run format`; don't hand-format.
+  `bun run format`; don't hand-format.
 - Unused vars are errors; prefix an intentionally-unused arg with `_`.
 - Comment the **why**, not the **what**. Keep comments at the density of the surrounding file.
 

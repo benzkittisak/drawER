@@ -18,31 +18,35 @@ docker compose -f docker-compose.dev.yml up --build   # open http://localhost:51
 
 ## Run with Docker — production (full stack)
 ```bash
-docker compose up --build      # web on http://localhost:8080, sync+DB on :1234
+docker compose up --build      # web on http://localhost:9901, sync+DB on :1234
 ```
-- **web** — the built SPA served by nginx (`:8080`).
+- **web** — the built SPA served by nginx (`:9901`).
 - **sync** — Yjs websocket server + SQLite database, stored on a persistent volume (`drawer-data`).
 
-Open http://localhost:8080 in two browsers, create/open a diagram, then **copy the URL**
+Open http://localhost:9901 in two browsers, create/open a diagram, then **copy the URL**
 (`…?room=<id>`) into the other browser to collaborate live (cursors + presence). The TopBar shows
 **Live · synced** when connected. To deploy elsewhere, rebuild web with
 `--build-arg VITE_SYNC_URL=wss://your-host` and publish the sync server there.
 
 ## Run locally (dev)
+Uses **Bun** as the package manager (the sync server runs on Node for `node:sqlite`).
 ```bash
-npm install
-npm run sync     # Yjs server + SQLite database (ws+http on :1234)
-npm run dev      # http://localhost:5173
+bun install
+bun run sync     # Yjs server + SQLite database (ws+http on :1234)
+bun run dev      # http://localhost:5173
 ```
 
 ## Scripts
 | Command | What |
 |---|---|
-| `npm run dev` | Vite dev server |
-| `npm run sync` | Yjs sync server + SQLite database (diagram storage) |
-| `npm run build` | Type-check + production build |
-| `npm test` | Unit + golden-file tests (Vitest) |
-| `npm run lint` / `typecheck` / `depcruise` | Quality gates |
+| `bun install` | Install dependencies (lockfile: `bun.lock`) |
+| `bun run dev` | Vite dev server |
+| `bun run sync` | Yjs sync server + SQLite database (diagram storage) |
+| `bun run build` | Type-check + production build |
+| `bun test`* / `bun run test` | Unit + golden-file tests (Vitest) |
+| `bun run lint` / `typecheck` / `depcruise` | Quality gates |
+
+\* use `bun run test` (runs Vitest); `bun test` would invoke Bun's own runner.
 
 ## Status
 Real-time collaborative ER editor: domain model + SQL engine (6 dialects) + import/DBML/Mermaid/

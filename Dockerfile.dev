@@ -1,10 +1,11 @@
-# Development image (hot reload). Installs the full dependency set; the source is bind-mounted
-# at runtime (see docker-compose.dev.yml) while node_modules is kept in an anonymous volume.
-# Used for BOTH services (web runs Vite dev, sync runs nodemon) via different commands.
+# Development image (hot reload). Node 24 (for the sync server's node:sqlite) + Bun (the package
+# manager). Installs the full dependency set with Bun; source is bind-mounted at runtime
+# (docker-compose.dev.yml) while node_modules stays in an anonymous volume.
+# Used for BOTH services: web runs `bun run dev` (Vite HMR), sync runs nodemon → node.
 FROM node:24-alpine
+RUN npm i -g bun
 WORKDIR /app
-COPY package.json package-lock.json ./
-RUN npm ci
-# Source comes from the bind mount; default to the Vite dev server.
+COPY package.json bun.lock ./
+RUN bun install --frozen-lockfile
 EXPOSE 5173 1234
-CMD ["npm", "run", "dev", "--", "--host"]
+CMD ["bun", "run", "dev", "--", "--host"]
