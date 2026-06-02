@@ -46,6 +46,15 @@ describe('Yjs schema mapping', () => {
     doc.transact(() => mut.removeField(maps, 'users', 'u_org'));
     expect(readDiagram(maps).relationships).toEqual([]);
   });
+
+  it('sets and clears a relationship routeOffsetX', () => {
+    const { doc, maps } = docWithSample();
+    doc.transact(() => mut.updateRelationship(maps, 'r_user_org', { routeOffsetX: 48 }));
+    expect(readDiagram(maps).relationships[0]!.routeOffsetX).toBe(48);
+
+    doc.transact(() => mut.updateRelationship(maps, 'r_user_org', { routeOffsetX: undefined }));
+    expect(readDiagram(maps).relationships[0]!.routeOffsetX).toBeUndefined();
+  });
 });
 
 describe('createDiagramReader (identity caching)', () => {
