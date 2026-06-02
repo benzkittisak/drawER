@@ -3,7 +3,7 @@
  * and falls back to the local store (localStorage) when the server is unreachable (offline).
  * Refreshes from PostgreSQL on mount (page load / return from editor).
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   deleteDiagram,
   refreshDiagramLibrary,
@@ -67,29 +67,60 @@ function Card({
   onOpen,
   onDelete,
   onRename,
+  deleteError,
 }: {
   d: DiagramSummary;
   me: MeUser;
   onOpen: () => void;
   onDelete: () => void;
   onRename: (newName: string) => void;
+  deleteError?: boolean;
 }) {
   const dbLabel = DIALECT_LABELS[d.dialect as DialectId] ?? d.dialect;
+  const [confirming, setConfirming] = useState(false);
+  const cancelTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const startConfirm = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setConfirming(true);
+    cancelTimer.current = setTimeout(() => setConfirming(false), 4000);
+  };
+  const cancelConfirm = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (cancelTimer.current) clearTimeout(cancelTimer.current);
+    setConfirming(false);
+  };
+  const confirmDelete = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (cancelTimer.current) clearTimeout(cancelTimer.current);
+    setConfirming(false);
+    onDelete();
+  };
+
   return (
     <div className="card" onClick={onOpen}>
       <div className="card__delete" onClick={(e) => e.stopPropagation()}>
-        <Btn
-          iconOnly
-          sm
-          variant="ghost"
-          icon="trash"
-          title="Delete diagram"
-          style={{ background: 'var(--surface)', boxShadow: 'var(--shadow-sm)' }}
-          onClick={(e) => {
-            e.stopPropagation();
-            onDelete();
-          }}
-        />
+        {confirming ? (
+          <div style={{ display: 'flex', gap: 4, alignItems: 'center', background: 'var(--surface)', borderRadius: 8, boxShadow: 'var(--shadow-sm)', padding: '2px 4px' }}>
+            <span style={{ fontSize: 11.5, color: 'var(--ink-2)', paddingLeft: 4, whiteSpace: 'nowrap' }}>Delete?</span>
+            <Btn iconOnly sm variant="ghost" icon="check" title="Confirm delete" style={{ color: 'var(--red, #e53e3e)' }} onClick={confirmDelete} />
+            <Btn iconOnly sm variant="ghost" icon="x" title="Cancel" onClick={cancelConfirm} />
+          </div>
+        ) : deleteError ? (
+          <div style={{ display: 'flex', gap: 4, alignItems: 'center', background: 'var(--surface)', borderRadius: 8, boxShadow: 'var(--shadow-sm)', padding: '2px 6px' }}>
+            <span style={{ fontSize: 11, color: 'var(--red, #e53e3e)', whiteSpace: 'nowrap' }}>Delete failed</span>
+          </div>
+        ) : (
+          <Btn
+            iconOnly
+            sm
+            variant="ghost"
+            icon="trash"
+            title="Delete diagram"
+            style={{ background: 'var(--surface)', boxShadow: 'var(--shadow-sm)' }}
+            onClick={startConfirm}
+          />
+        )}
       </div>
       <Thumb colors={d.colors} />
       <div className="card__body">
@@ -133,6 +164,7 @@ export function Dashboard({ onOpen, onNew }: DashboardProps) {
   const [all, setAll] = useState<DiagramSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [offline, setOffline] = useState(false);
+  const [deleteErrorId, setDeleteErrorId] = useState<string | null>(null);
 
   const loadLibrary = useCallback(() => {
     setLoading(true);
@@ -170,10 +202,10 @@ export function Dashboard({ onOpen, onNew }: DashboardProps) {
   };
 
   const removeDiagram = async (d: DiagramSummary) => {
-    if (!window.confirm(`Delete "${d.name}"? This cannot be undone.`)) return;
+    setDeleteErrorId(null);
     const ok = await deleteDiagram(d.id);
     if (!ok) {
-      window.alert('Could not delete on the server. Check that sync is running and try again.');
+      setDeleteErrorId(d.id);
       return;
     }
     setAll((list) => list.filter((x) => x.id !== d.id));
@@ -225,8 +257,9 @@ export function Dashboard({ onOpen, onNew }: DashboardProps) {
               d={d}
               me={me}
               onOpen={() => onOpen(d.id)}
-              onDelete={() => removeDiagram(d)}
+              onDelete={() => void removeDiagram(d)}
               onRename={(name) => renameDiagram(d, name)}
+              deleteError={deleteErrorId === d.id}
             />
           ))}
           <div className="card card--new" onClick={onNew}>

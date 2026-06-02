@@ -4,7 +4,7 @@
  */
 import { useState, type DragEvent } from 'react';
 import { TYPE_KEYS, createField, createIndex, newId, type Field, type Index, type Table } from '@core';
-import { useEditorActions, useTable } from '@store';
+import { addRecentColor, getRecentColors, useEditorActions, useTable } from '@store';
 import { Icon } from '@ui/Icon';
 import { Btn } from '@ui/atoms';
 
@@ -223,6 +223,7 @@ export function TableEditorPanel({
   const [section, setSection] = useState<Section>('columns');
   const [dragId, setDragId] = useState<string | null>(null);
   const [overIndex, setOverIndex] = useState<number | null>(null);
+  const [recentColors, setRecentColors] = useState(getRecentColors);
 
   if (!table) {
     return <div className="te-empty">This table no longer exists.</div>;
@@ -288,16 +289,24 @@ export function TableEditorPanel({
           </label>
           <div className="te-label">Color</div>
           <div className="te-colors">
-            {COLORS.map((c) => (
+            {[...COLORS, ...recentColors.filter((c) => !COLORS.includes(c))].map((c) => (
               <button
                 key={c}
                 type="button"
                 title={c}
-                className={'te-swatch' + ((table.color ?? '') === c ? ' te-swatch--on' : '')}
+                className={'te-swatch' + ((table.color ?? '').toLowerCase() === c ? ' te-swatch--on' : '')}
                 style={{ background: c }}
                 onClick={() => updateTable(table.id, { color: c })}
               />
             ))}
+            <label className="te-swatch te-swatch--custom" title="Custom color…">
+              <input
+                type="color"
+                value={table.color ?? '#6366f1'}
+                onChange={(e) => updateTable(table.id, { color: e.target.value })}
+                onBlur={(e) => setRecentColors(addRecentColor(e.target.value))}
+              />
+            </label>
           </div>
           {onAddForeignKey && (
             <Btn sm variant="ghost" icon="link" style={{ marginTop: 8, alignSelf: 'flex-start' }} onClick={onAddForeignKey}>
@@ -320,6 +329,15 @@ export function TableEditorPanel({
 
       {section === 'columns' && (
         <div className="te-section">
+          <Btn
+            sm
+            variant="ghost"
+            icon="plus"
+            style={{ color: 'var(--accent-strong)', alignSelf: 'flex-start' }}
+            onClick={() => addField(table.id, createField(newId(), `field_${table.fields.length + 1}`, 'varchar'))}
+          >
+            Add column
+          </Btn>
           <p className="te-hint">Drag the handle to reorder. Use IX for a quick single-column index.</p>
           <div className="field-editor__list">
             {table.fields.map((f, i) => (
@@ -341,15 +359,6 @@ export function TableEditorPanel({
             ))}
             {table.fields.length === 0 && <div className="te-empty">No columns yet.</div>}
           </div>
-          <Btn
-            sm
-            variant="ghost"
-            icon="plus"
-            style={{ marginTop: 10, color: 'var(--accent-strong)', alignSelf: 'flex-start' }}
-            onClick={() => addField(table.id, createField(newId(), `field_${table.fields.length + 1}`, 'varchar'))}
-          >
-            Add column
-          </Btn>
         </div>
       )}
 

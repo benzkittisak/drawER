@@ -220,7 +220,7 @@ button { font-family: inherit; cursor: pointer; }
   display: flex; flex-direction: column; min-height: 0;
   z-index: 30;
 }
-.panel--left { border-right: 1px solid var(--line); }
+.panel--left { border-right: 1px solid var(--line); flex: 1; }
 .panel--right { border-left: 1px solid var(--line); width: 100%; flex: 1; min-width: 0; }
 .panel.collapsed { display: none; }
 
@@ -366,6 +366,12 @@ button { font-family: inherit; cursor: pointer; }
   min-height: 38px; display: flex; align-items: center; gap: 8px;
   padding: 6px 6px 6px 12px; cursor: grab; border-bottom: 1px solid var(--line);
 }
+/* Relationship anchors (geometry.ts `fieldCenterY`) assume a FIXED header height:
+   HEAD (38px) without a comment, HEAD + HEAD_COMMENT (38 + 22 = 60px) with one.
+   The header must therefore render at exactly those heights, regardless of whether the
+   comment wraps to 1 or 2 lines — otherwise a 1-line comment leaves the header short and
+   field anchors (and FK lines) drift below the row center. Pin the commented header to 60px. */
+.node__head:has(.node__comment) { height: 60px; }
 .node__head:active { cursor: grabbing; }
 .node__icon { color: var(--ink-3); }
 .node__head-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
@@ -441,7 +447,8 @@ button { font-family: inherit; cursor: pointer; }
   fill: none;
   stroke: transparent;
   stroke-width: 14;
-  cursor: pointer;
+  /* Edges can be dragged horizontally to nudge their routing; hint that with the resize cursor. */
+  cursor: ew-resize;
 }
 .rel-path-hit--active { stroke: transparent; stroke-width: 18; }
 .rel-dot { fill: var(--surface); stroke: var(--accent); stroke-width: 2; }
@@ -758,6 +765,12 @@ button { font-family: inherit; cursor: pointer; }
   width: 24px; height: 24px; border-radius: 6px; cursor: pointer; border: 1px solid var(--line-2); padding: 0;
 }
 .te-swatch--on { outline: 2px solid var(--ink); outline-offset: 1px; }
+/* "Pick any color" swatch — a rainbow tile with the native color input overlaid transparent. */
+.te-swatch--custom { position: relative; overflow: hidden;
+  background: conic-gradient(from 0deg, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00); }
+.te-swatch--custom input[type="color"] {
+  position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; padding: 0; border: 0; cursor: pointer;
+}
 .te-textarea {
   width: 100%; min-height: 88px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 9px;
   background: var(--surface-2); font-family: inherit; font-size: 13px; line-height: 1.45;

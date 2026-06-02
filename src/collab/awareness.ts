@@ -4,6 +4,7 @@
  * pan/zoom-transformed layer, so a canvas-coord point lands correctly for every viewer).
  */
 import type { Awareness } from 'y-protocols/awareness';
+import { newId } from '@core/id';
 
 export type Activity =
   | { type: 'idle' }
@@ -41,7 +42,7 @@ export function getLocalIdentity(): PresenceUser {
   } catch {
     /* ignore */
   }
-  const id = crypto.randomUUID();
+  const id = newId();
   const n = (s: number) => Math.abs(hash(id + s));
   const user: PresenceUser = {
     id,

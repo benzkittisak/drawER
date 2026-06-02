@@ -10,8 +10,9 @@ FROM oven/bun:1-alpine AS build
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-# Baked into the bundle — the URL the BROWSER uses to reach the sync server.
-ARG VITE_SYNC_URL=ws://localhost:1234
+# Override only for non-standard deployments (separate sync host). When empty (default),
+# the SPA derives the WebSocket URL from window.location at runtime via nginx /sync proxy.
+ARG VITE_SYNC_URL=
 ENV VITE_SYNC_URL=$VITE_SYNC_URL
 # Bundling @dbml/core (antlr4) is memory-heavy — raise V8's heap so the build doesn't OOM.
 ENV NODE_OPTIONS=--max-old-space-size=4096

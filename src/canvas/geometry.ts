@@ -155,7 +155,10 @@ export function wirePath(
   const toHoriz: 1 | -1 = childIsLeft ? -1 : 1;
   const x1 = sx + fromHoriz * ROUTE_GAP;
   const x2 = tx + toHoriz * ROUTE_GAP;
-  const midX = midXOverride ?? (x1 + x2) / 2;
+  // Bend (and the label pinned to it) at the TRUE midpoint between the two field anchors. Using
+  // (x1 + x2) / 2 would bias it by ROUTE_GAP, since fromHoriz/toHoriz share a sign — that shifted the
+  // cardinality badge ~22px off-center.
+  const midX = midXOverride ?? (sx + tx) / 2;
   const d = `M ${sx} ${sy} L ${x1} ${sy} L ${midX} ${sy} L ${midX} ${ty} L ${x2} ${ty} L ${tx} ${ty}`;
   return {
     d,
@@ -231,13 +234,13 @@ export function layoutRelationshipPaths(
     for (let i = 0; i < n; i++) {
       const { rel, anchor } = list[i]!;
       const { sx, sy, tx, ty, childIsLeft } = anchor;
-      const fromHoriz: 1 | -1 = childIsLeft ? -1 : 1;
-      const toHoriz: 1 | -1 = childIsLeft ? -1 : 1;
-      const x1 = sx + fromHoriz * ROUTE_GAP;
-      const x2 = tx + toHoriz * ROUTE_GAP;
-      const baseMidX = (x1 + x2) / 2;
+      // True midpoint between the field anchors (see wirePath) — keeps the badge centered; the
+      // per-lane offset still fans parallel FKs apart around it.
+      const baseMidX = (sx + tx) / 2;
       const laneOffset = n === 1 ? 0 : (i - (n - 1) / 2) * LANE_SPACING;
-      out.set(rel.id, wirePath(sx, sy, tx, ty, childIsLeft, baseMidX + laneOffset));
+      // User's manual nudge (drag) stacks on top of the auto lane-stagger.
+      const manual = rel.routeOffsetX ?? 0;
+      out.set(rel.id, wirePath(sx, sy, tx, ty, childIsLeft, baseMidX + laneOffset + manual));
     }
   }
 

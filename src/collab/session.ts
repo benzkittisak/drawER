@@ -43,7 +43,21 @@ type CommentsListener = (comments: Comment[]) => void;
 type ActivityListener = (activity: ActivityEntry[]) => void;
 type PresencePatch = Partial<Pick<PresenceState, 'cursor' | 'selection' | 'activity'>>;
 
-const SYNC_URL = (import.meta.env.VITE_SYNC_URL as string | undefined) || 'ws://localhost:1234';
+/**
+ * Derive the Yjs WebSocket URL.
+ * - Dev: always ws://localhost:1234 (Vite only proxies /api, not WebSocket).
+ * - Prod with explicit VITE_SYNC_URL build arg: use it as-is (custom deployments).
+ * - Prod without it: same-origin /sync so nginx routes the WebSocket to the sync container
+ *   without requiring the browser to reach port 1234 directly.
+ */
+function deriveSyncUrl(): string {
+  if (import.meta.env.DEV) return 'ws://localhost:1234';
+  const explicit = import.meta.env.VITE_SYNC_URL as string | undefined;
+  if (explicit) return explicit;
+  const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  return `${proto}//${window.location.host}/sync`;
+}
+const SYNC_URL = deriveSyncUrl();
 /** Cap the in-memory undo history so a long editing session can't grow it without bound. */
 const MAX_UNDO_STACK = 300;
 
@@ -213,6 +227,9 @@ class CollabSession {
   }
   resolveComment(id: string): void {
     this.transact((m) => commentMut.resolve(m, id));
+  }
+  deleteComment(id: string): void {
+    this.transact((m) => commentMut.remove(m, id));
   }
   addReply(id: string, reply: CommentReply): void {
     this.transact((m) => commentMut.reply(m, id, reply));

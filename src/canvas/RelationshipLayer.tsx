@@ -2,7 +2,7 @@
  * RelationshipLayer — orthogonal edges between field rows, cardinality markers, and labels.
  * Renders graphics below tables; use RelationshipHitLayer on top for selection.
  */
-import { memo } from 'react';
+import { memo, type MouseEvent } from 'react';
 import type { Relationship, Table } from '@core';
 import { CARDINALITY_LABEL } from '@core';
 import {
@@ -33,6 +33,8 @@ interface LayerProps {
   relGeometries: Map<string, RelGeometry | null>;
   selectedRel: string | null;
   hotRel: string | null;
+  /** Selected table id — its incident edges are highlighted (treated as active). */
+  selectedTable?: string | null;
   linking?: LinkingState | null;
   /** When set (large diagrams), skip edges whose endpoints' bounding box is outside the viewport. */
   viewRect?: DiagramBounds | null;
@@ -114,6 +116,7 @@ export const RelationshipLayer = memo(function RelationshipLayer({
   relGeometries,
   selectedRel,
   hotRel,
+  selectedTable,
   linking,
   viewRect,
 }: LayerProps) {
@@ -136,7 +139,11 @@ export const RelationshipLayer = memo(function RelationshipLayer({
         const from = byId[r.fromTableId];
         const to = byId[r.toTableId];
         if (viewRect && !edgeInView(from, to, viewRect)) return null;
-        const active = hotRel === r.id || selectedRel === r.id;
+        const active =
+          hotRel === r.id ||
+          selectedRel === r.id ||
+          r.fromTableId === selectedTable ||
+          r.toTableId === selectedTable;
         return <RelEdgeGraphics key={r.id} rel={r} geometry={g} active={active} />;
       })}
       {linkingPath && <path d={linkingPath} className="rel-path rel-path--linking" />}
@@ -152,6 +159,8 @@ interface HitProps {
   onSelectRel: (id: string, clientX: number, clientY: number) => void;
   onFocusRel: (id: string) => void;
   onContextMenuRel: (id: string, clientX: number, clientY: number) => void;
+  /** Arm a horizontal route-drag of this edge (omitted when readonly). */
+  onRouteDragStart?: (e: MouseEvent, relId: string) => void;
 }
 
 const RelHitPath = memo(function RelHitPath({
@@ -162,6 +171,7 @@ const RelHitPath = memo(function RelHitPath({
   onSelectRel,
   onFocusRel,
   onContextMenuRel,
+  onRouteDragStart,
 }: HitProps) {
   return (
     <path
@@ -170,6 +180,11 @@ const RelHitPath = memo(function RelHitPath({
       className={'rel-path-hit' + (active ? ' rel-path-hit--active' : '')}
       onMouseEnter={() => onHot(rel.id)}
       onMouseLeave={() => onHot(null)}
+      onMouseDown={(e) => {
+        // Arm a route-drag. Selection still happens on click (which preserves overlap-cycling); a
+        // real drag suppresses that click so selection doesn't jump to a stacked edge.
+        if (e.button === 0) onRouteDragStart?.(e, rel.id);
+      }}
       onClick={(e) => {
         e.stopPropagation();
         onSelectRel(rel.id, e.clientX, e.clientY);
@@ -199,11 +214,13 @@ export const RelationshipHitLayer = memo(function RelationshipHitLayer({
   onSelectRel,
   onFocusRel,
   onContextMenuRel,
+  onRouteDragStart,
 }: LayerProps & {
   onHot: (id: string | null) => void;
   onSelectRel: (id: string, clientX: number, clientY: number) => void;
   onFocusRel: (id: string) => void;
   onContextMenuRel: (id: string, clientX: number, clientY: number) => void;
+  onRouteDragStart?: (e: MouseEvent, relId: string) => void;
 }) {
   const paintRels = orderRelsForPaint(rels, selectedRel, hotRel);
 
@@ -226,6 +243,7 @@ export const RelationshipHitLayer = memo(function RelationshipHitLayer({
             onSelectRel={onSelectRel}
             onFocusRel={onFocusRel}
             onContextMenuRel={onContextMenuRel}
+            onRouteDragStart={onRouteDragStart}
           />
         );
       })}

@@ -105,7 +105,8 @@
         "toFieldId": { "$ref": "#/$defs/Id" },
         "cardinality": { "$ref": "#/$defs/Cardinality" },
         "onUpdate": { "$ref": "#/$defs/RefAction" },
-        "onDelete": { "$ref": "#/$defs/RefAction" }
+        "onDelete": { "$ref": "#/$defs/RefAction" },
+        "routeOffsetX": { "type": "number" }
       }
     },
     "CustomType": {

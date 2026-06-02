@@ -64,7 +64,7 @@ export interface EditorState {
   removeIndex: (tableId: Id, indexId: Id) => void;
   toggleFieldIndex: (tableId: Id, fieldId: Id) => void;
   addRelationship: (rel: Relationship) => void;
-  updateRelationship: (id: Id, patch: Partial<Pick<Relationship, 'name' | 'cardinality' | 'onUpdate' | 'onDelete'>>) => void;
+  updateRelationship: (id: Id, patch: Partial<Pick<Relationship, 'name' | 'cardinality' | 'onUpdate' | 'onDelete' | 'routeOffsetX'>>) => void;
   deleteEntity: (id: Id) => void;
 
   // collaboration
@@ -82,6 +82,7 @@ export interface EditorState {
   // comments
   addComment: (input: { x: number; y: number; tableId: string | null; body: string }) => void;
   resolveComment: (id: string) => void;
+  deleteComment: (id: string) => void;
   addReply: (id: string, body: string) => void;
 
   // versions
@@ -248,6 +249,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   resolveComment: (id) => {
     if (!canMutate(get)) return;
     session.resolveComment(id);
+  },
+  deleteComment: (id) => {
+    if (!canMutate(get)) return;
+    session.deleteComment(id);
   },
   addReply: (id, body) => {
     if (!canMutate(get)) return;

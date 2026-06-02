@@ -65,6 +65,9 @@ export interface Relationship {
   cardinality: Cardinality;
   onUpdate: RefAction;
   onDelete: RefAction;
+  /** Manual horizontal offset (canvas px) of the routing segment — dragged by the user to nudge
+   *  overlapping edges apart. Absent = auto-routed. */
+  routeOffsetX?: number;
 }
 
 export interface CustomType {

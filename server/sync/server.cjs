@@ -247,9 +247,11 @@ const server = http.createServer(async (req, res) => {
       return;
     }
     const idMatch = req.url?.match(/^\/api\/diagrams\/([^/?]+)$/);
+    // The client sends encodeURIComponent(id); decode so the stored name matches the room name.
+    const diagramId = idMatch ? decodeURIComponent(idMatch[1]) : null;
     if (req.method === 'PUT' && idMatch) {
       const body = await readJsonBody(req);
-      const docName = `drawer-${idMatch[1]}`;
+      const docName = `drawer-${diagramId}`;
       const displayName = body.name || 'Untitled diagram';
       const dialect = body.dialect || 'postgres';
       const tableCount = Number.isFinite(body.tableCount) ? body.tableCount : 0;
@@ -284,7 +286,7 @@ const server = http.createServer(async (req, res) => {
       return;
     }
     if (req.method === 'DELETE' && idMatch) {
-      await pool.query('DELETE FROM docs WHERE name = $1', [`drawer-${idMatch[1]}`]);
+      await pool.query('DELETE FROM docs WHERE name = $1', [`drawer-${diagramId}`]);
       res.statusCode = 204;
       res.end();
       return;
@@ -300,7 +302,15 @@ const server = http.createServer(async (req, res) => {
 });
 
 const wss = new WebSocketServer({ noServer: true });
-wss.on('connection', setupWSConnection);
+wss.on('connection', (ws, req) => {
+  // Derive the Yjs doc/room name ourselves and strip any leading slashes a reverse proxy may have
+  // left on the path (e.g. an nginx prefix rewrite can yield //room → req.url "//room"). The
+  // default docName is `req.url.slice(1)`, which keeps a stray leading slash and would persist the
+  // doc under "/drawer-<id>" — defeating the GET/DELETE `drawer-` prefix round-trip. Normalizing
+  // here makes storage immune to proxy path quirks regardless of the nginx config.
+  const docName = (req.url || '').replace(/^\/+/, '').split('?')[0];
+  setupWSConnection(ws, req, { docName });
+});
 server.on('upgrade', (req, socket, head) => {
   wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));
 });

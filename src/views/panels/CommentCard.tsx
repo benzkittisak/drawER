@@ -26,8 +26,9 @@ interface CommentCardProps {
 }
 
 export function CommentCard({ comment, draft, onClose }: CommentCardProps) {
-  const { addComment, resolveComment, addReply } = useCommentActions();
+  const { addComment, resolveComment, addReply, deleteComment } = useCommentActions();
   const [val, setVal] = useState('');
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const isNew = !!draft && !comment;
 
   const submit = () => {
@@ -110,10 +111,38 @@ export function CommentCard({ comment, draft, onClose }: CommentCardProps) {
       </div>
 
       {comment && (
-        <div style={{ padding: '0 14px 12px' }}>
+        <div style={{ padding: '0 14px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
           <Btn sm variant="ghost" icon="checkCircle" onClick={() => resolveComment(comment.id)} style={{ color: 'var(--u-you)' }}>
             {comment.resolved ? 'Resolved' : 'Mark resolved'}
           </Btn>
+          {confirmingDelete ? (
+            <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+              <span style={{ fontSize: 11.5, color: 'var(--ink-2)', whiteSpace: 'nowrap' }}>Delete thread?</span>
+              <Btn
+                iconOnly
+                sm
+                variant="ghost"
+                icon="check"
+                title="Confirm delete"
+                style={{ color: 'var(--red, #e53e3e)' }}
+                onClick={() => {
+                  deleteComment(comment.id);
+                  onClose();
+                }}
+              />
+              <Btn iconOnly sm variant="ghost" icon="x" title="Cancel" onClick={() => setConfirmingDelete(false)} />
+            </div>
+          ) : (
+            <Btn
+              iconOnly
+              sm
+              variant="ghost"
+              icon="trash"
+              title="Delete thread"
+              style={{ color: 'var(--ink-3)' }}
+              onClick={() => setConfirmingDelete(true)}
+            />
+          )}
         </div>
       )}
     </div>

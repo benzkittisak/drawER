@@ -172,10 +172,16 @@ export function useActivity(): ActivityEntry[] {
 export function useCommentActions(): {
   addComment: (input: { x: number; y: number; tableId: string | null; body: string }) => void;
   resolveComment: (id: string) => void;
+  deleteComment: (id: string) => void;
   addReply: (id: string, body: string) => void;
 } {
   return useEditorStore(
-    useShallow((s) => ({ addComment: s.addComment, resolveComment: s.resolveComment, addReply: s.addReply })),
+    useShallow((s) => ({
+      addComment: s.addComment,
+      resolveComment: s.resolveComment,
+      deleteComment: s.deleteComment,
+      addReply: s.addReply,
+    })),
   );
 }
 

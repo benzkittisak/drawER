@@ -66,7 +66,11 @@ type DragState =
   | { mode: 'node'; id: string; sx: number; sy: number; ox: number; oy: number; lastX: number; lastY: number }
   | { mode: 'pan'; sx: number; sy: number; ox: number; oy: number }
   | { mode: 'link'; fromT: string; fromF: string }
+  | { mode: 'route'; relId: string; sx: number; sy: number; initialOffset: number; moved: boolean }
   | null;
+
+/** Pointer travel (screen px) before an edge press becomes a route-drag rather than a click. */
+const ROUTE_DRAG_THRESHOLD = 3;
 
 /** At/above this table count, render only the nodes + edges intersecting the viewport (culling). */
 const VIRTUALIZE_THRESHOLD = 60;
@@ -119,6 +123,11 @@ export function Canvas({
   const dragPreviewRef = useRef<{ id: string; x: number; y: number } | null>(null);
   const dragPaintRaf = useRef(0);
   const [dragPreview, setDragPreview] = useState<{ id: string; x: number; y: number } | null>(null);
+  // Live preview of a relationship being route-dragged (separate from node drag; the two are mutually
+  // exclusive). The committed offset lives on the relationship; this is the in-flight value.
+  const routeDragRef = useRef<{ relId: string; offset: number } | null>(null);
+  const routePaintRaf = useRef(0);
+  const [routeDragPreview, setRouteDragPreview] = useState<{ relId: string; offset: number } | null>(null);
   const [hotRel, setHotRel] = useState<string | null>(null);
   const [linking, setLinking] = useState<LinkingState | null>(null);
   const [isPanning, setIsPanning] = useState(false);
@@ -178,8 +187,33 @@ export function Canvas({
     dragPreviewRef.current = null;
     setDragPreview(null);
   }, []);
+
+  const scheduleRoutePaint = useCallback(() => {
+    if (routePaintRaf.current) return;
+    routePaintRaf.current = requestAnimationFrame(() => {
+      routePaintRaf.current = 0;
+      setRouteDragPreview(routeDragRef.current ? { ...routeDragRef.current } : null);
+    });
+  }, []);
+
+  const clearRoutePaint = useCallback(() => {
+    if (routePaintRaf.current) cancelAnimationFrame(routePaintRaf.current);
+    routePaintRaf.current = 0;
+    routeDragRef.current = null;
+    setRouteDragPreview(null);
+  }, []);
+
   const fkFieldIds = useMemo(() => new Set(rels.map((r) => r.fromFieldId)), [rels]);
-  const relGeometries = useMemo(() => layoutRelationshipPaths(rels, layoutById), [rels, layoutById]);
+  // During a route drag, override just the dragged relationship's offset so the preview re-routes live
+  // without committing. Idle → `previewRels === rels`, preserving edge memoization.
+  const previewRels = useMemo(
+    () =>
+      routeDragPreview
+        ? rels.map((r) => (r.id === routeDragPreview.relId ? { ...r, routeOffsetX: routeDragPreview.offset } : r))
+        : rels,
+    [rels, routeDragPreview],
+  );
+  const relGeometries = useMemo(() => layoutRelationshipPaths(previewRels, layoutById), [previewRels, layoutById]);
 
   // Virtualization: on big diagrams render only what intersects the viewport, and collapse field
   // rows when zoomed far out. Small diagrams render everything (culling would cost more than it saves
@@ -240,6 +274,28 @@ export function Canvas({
     [readonly],
   );
 
+  // Begin dragging a relationship's routing segment sideways (to nudge overlapping edges apart). The
+  // edge is already selected on mousedown; this only arms the drag — the threshold in `move` decides
+  // whether it becomes a real route-drag or stays a plain click.
+  const onRouteDragStart = useCallback(
+    (e: MouseEvent, relId: string) => {
+      if (readonly) return;
+      e.preventDefault();
+      window.getSelection()?.removeAllRanges();
+      const rel = useEditorStore.getState().diagram.relationships.find((r) => r.id === relId);
+      if (!rel) return;
+      drag.current = {
+        mode: 'route',
+        relId,
+        sx: e.clientX,
+        sy: e.clientY,
+        initialOffset: rel.routeOffsetX ?? 0,
+        moved: false,
+      };
+    },
+    [readonly],
+  );
+
   const startPanDrag = (e: MouseEvent) => {
     e.preventDefault();
     window.getSelection()?.removeAllRanges();
@@ -267,8 +323,15 @@ export function Canvas({
     [readonly, setSelectedRel],
   );
 
+  // Set when a route-drag actually moved, so the click synthesized after mouseup doesn't also
+  // cycle-select a (possibly different) overlapping edge.
+  const suppressRelClick = useRef(false);
   const onSelectRel = useCallback(
     (relId: string, clientX: number, clientY: number) => {
+      if (suppressRelClick.current) {
+        suppressRelClick.current = false;
+        return;
+      }
       const next = pickRelationshipAtPoint(relId, clientX, clientY, selectedRel);
       setSelectedRel(next);
     },
@@ -291,10 +354,18 @@ export function Canvas({
     startPanDrag(e);
   };
 
+  // A background click is any left-click that lands on empty canvas: the transformed `.canvas`
+  // surface, the grid behind it, or the wrap itself. `.canvas` is panned/zoomed via a CSS transform,
+  // so it only covers PART of the viewport — the rest of the empty area is the grid/wrap. Matching
+  // all three (instead of just listening on `.canvas`) is what makes deselect work no matter how far
+  // the view is panned. Nodes/edges/pins/grips and the floating dock/zoom/find/menus are never one of
+  // these elements, so clicking them never deselects.
   const onCanvasMouseDown = (e: MouseEvent) => {
     if (e.button !== 0 || tool === 'pan') return;
     const el = e.target as HTMLElement;
-    if (el.closest('.node__grip, .rel-path-hit, .pin')) return;
+    const isBackground =
+      el === wrapRef.current || el.classList.contains('canvas') || el.classList.contains('canvas-grid');
+    if (!isBackground) return;
     onBgDown(e);
   };
 
@@ -331,6 +402,12 @@ export function Canvas({
       } else if (d.mode === 'link') {
         const p = toCanvas(e.clientX, e.clientY);
         setLinking((l) => (l ? { ...l, x: p.x, y: p.y } : l));
+      } else if (d.mode === 'route') {
+        const dx = e.clientX - d.sx;
+        if (!d.moved && Math.hypot(dx, e.clientY - d.sy) <= ROUTE_DRAG_THRESHOLD) return;
+        d.moved = true;
+        routeDragRef.current = { relId: d.relId, offset: d.initialOffset + dx / camRef.current.z };
+        scheduleRoutePaint();
       }
     };
     const up = (e: globalThis.MouseEvent) => {
@@ -341,6 +418,14 @@ export function Canvas({
       if (d.mode === 'node') {
         clearDragPaint();
         actions.commitDrag(d.id, d.lastX, d.lastY);
+      } else if (d.mode === 'route') {
+        if (d.moved) {
+          suppressRelClick.current = true;
+          actions.updateRelationship(d.relId, {
+            routeOffsetX: Math.round(d.initialOffset + (e.clientX - d.sx) / camRef.current.z),
+          });
+        }
+        clearRoutePaint();
       } else if (d.mode === 'link') {
         // Complete the relationship if released over another table's field row.
         const target = (document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null)?.closest(
@@ -367,8 +452,9 @@ export function Canvas({
       window.removeEventListener('mouseup', up);
       document.removeEventListener('selectstart', blockSelect);
       if (dragPaintRaf.current) cancelAnimationFrame(dragPaintRaf.current);
+      if (routePaintRaf.current) cancelAnimationFrame(routePaintRaf.current);
     };
-  }, [toCanvas, actions, scheduleDragPaint, clearDragPaint, applyCam, markViewportMoving]);
+  }, [toCanvas, actions, scheduleDragPaint, clearDragPaint, scheduleRoutePaint, clearRoutePaint, applyCam, markViewportMoving]);
 
   // Delete selected entity with Delete/Backspace (unless typing in a field).
   useEffect(() => {
@@ -572,8 +658,9 @@ export function Canvas({
     ['hand', 'pan', 'Pan  H'],
   ];
 
-  const cursor =
-    isPanning || tool === 'pan'
+  const cursor = routeDragPreview
+    ? 'grabbing'
+    : isPanning || tool === 'pan'
       ? isPanning
         ? 'grabbing'
         : 'grab'
@@ -586,6 +673,7 @@ export function Canvas({
       className="canvas-wrap"
       ref={wrapRef}
       onMouseDownCapture={onWrapMouseDownCapture}
+      onMouseDown={onCanvasMouseDown}
       onAuxClick={(e) => e.button === 1 && e.preventDefault()}
       onMouseMove={onPointerMove}
       onMouseLeave={onPointerLeave}
@@ -597,7 +685,6 @@ export function Canvas({
       <div
         className={'canvas' + (isPanning || isViewportMoving ? ' canvas--moving' : '')}
         style={{ transform: `translate(${cam.x}px, ${cam.y}px) scale(${cam.z})` }}
-        onMouseDown={onCanvasMouseDown}
       >
         <RelationshipLayer
           rels={rels}
@@ -605,6 +692,7 @@ export function Canvas({
           relGeometries={relGeometries}
           selectedRel={selectedRel}
           hotRel={hotRel}
+          selectedTable={selected}
           linking={linking}
           viewRect={cullRect}
         />
@@ -640,6 +728,7 @@ export function Canvas({
           onSelectRel={onSelectRel}
           onFocusRel={focusRelEndpoint}
           onContextMenuRel={onRelContextMenu}
+          onRouteDragStart={readonly ? undefined : onRouteDragStart}
         />
 
         {pins && <CommentPins comments={comments} draft={draft} onOpen={onOpenComment} />}

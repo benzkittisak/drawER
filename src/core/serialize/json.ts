@@ -93,6 +93,7 @@ function normRelationship(v: unknown): Relationship {
     cardinality: (str(r.cardinality, 'many_to_one') as Relationship['cardinality']),
     onUpdate: (str(r.onUpdate, 'NO ACTION') as Relationship['onUpdate']),
     onDelete: (str(r.onDelete, 'NO ACTION') as Relationship['onDelete']),
+    routeOffsetX: optNum(r.routeOffsetX),
   };
 }
 

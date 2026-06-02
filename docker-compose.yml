@@ -50,7 +50,7 @@ services:
       PORT: '1234'
       DATABASE_URL: postgres://drawer:drawer@db:5432/drawer
       # "Generate with AI" (POST /api/ai/generate-schema) — inert until a key is provided.
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-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}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-5.5}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
       # Remote DB import (Import → Database tab → POST /api/db/connect,/api/db/introspect).
@@ -82,8 +82,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      args:
-        VITE_SYNC_URL: ws://localhost:1234
+      # VITE_SYNC_URL is intentionally omitted: the SPA derives the WebSocket URL from
+      # window.location at runtime (nginx proxies /sync → sync container), so the same
+      # image works on any hostname without a rebuild. Override here only for non-standard
+      # deployments (e.g. a separate sync server on a different host).
     ports:
       - '9901:80'
     depends_on:

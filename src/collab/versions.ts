@@ -5,6 +5,7 @@
  */
 import type { Diagram } from '@core';
 import { decodeDiagramSnapshot, session } from './session';
+import { newId } from '@core/id';
 import type { PresenceUser } from './awareness';
 
 export interface VersionMeta {
@@ -58,7 +59,7 @@ export function saveVersion(diagramId: string, label: string, author: PresenceUs
   const update = session.getStateUpdate();
   if (!update) return null;
   const v: StoredVersion = {
-    id: crypto.randomUUID(),
+    id: newId(),
     label,
     author: author.name,
     authorColor: author.color,

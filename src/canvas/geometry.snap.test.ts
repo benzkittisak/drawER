@@ -111,6 +111,14 @@ describe('layoutRelationshipPaths', () => {
     expect(Math.abs(g1!.labelX - g2!.labelX)).toBe(LANE_SPACING);
   });
 
+  it('shifts an edge by its manual routeOffsetX', () => {
+    const base = createRelationship('r1', { tableId: 'users', fieldId: 'u2' }, { tableId: 'orders', fieldId: 'o1' });
+    const shifted = { ...base, routeOffsetX: 40 };
+    const baseX = layoutRelationshipPaths([base], byId).get('r1')!.labelX;
+    const shiftedX = layoutRelationshipPaths([shifted], byId).get('r1')!.labelX;
+    expect(shiftedX - baseX).toBe(40);
+  });
+
   it('returns null when an endpoint table is missing', () => {
     const rel = createRelationship('x', { tableId: 'users', fieldId: 'u1' }, { tableId: 'missing', fieldId: 'o1' });
     expect(layoutRelationshipPaths([rel], byId).get('x')).toBeNull();

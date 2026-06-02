@@ -97,6 +97,7 @@ function relToY(r: Relationship): YMap {
   for (const k of ['id', 'name', 'fromTableId', 'fromFieldId', 'toTableId', 'toFieldId', 'cardinality', 'onUpdate', 'onDelete'] as const) {
     m.set(k, r[k]);
   }
+  if (r.routeOffsetX != null) m.set('routeOffsetX', r.routeOffsetX);
   return m;
 }
 function yToRel(m: YMap): Relationship {
@@ -110,6 +111,7 @@ function yToRel(m: YMap): Relationship {
     cardinality: m.get('cardinality') as Relationship['cardinality'],
     onUpdate: m.get('onUpdate') as Relationship['onUpdate'],
     onDelete: m.get('onDelete') as Relationship['onDelete'],
+    routeOffsetX: (m.get('routeOffsetX') as number | undefined) ?? undefined,
   };
 }
 
@@ -364,7 +366,7 @@ export const mut = {
   updateRelationship(
     maps: DocMaps,
     id: string,
-    patch: Partial<Pick<Relationship, 'name' | 'cardinality' | 'onUpdate' | 'onDelete'>>,
+    patch: Partial<Pick<Relationship, 'name' | 'cardinality' | 'onUpdate' | 'onDelete' | 'routeOffsetX'>>,
   ): void {
     const rm = maps.rels.get(id);
     if (!rm) return;
@@ -372,6 +374,11 @@ export const mut = {
     if (patch.cardinality != null) rm.set('cardinality', patch.cardinality);
     if (patch.onUpdate != null) rm.set('onUpdate', patch.onUpdate);
     if (patch.onDelete != null) rm.set('onDelete', patch.onDelete);
+    // null/undefined clears the manual route offset (reset to auto-routing); a number sets it.
+    if ('routeOffsetX' in patch) {
+      if (patch.routeOffsetX == null) rm.delete('routeOffsetX');
+      else rm.set('routeOffsetX', patch.routeOffsetX);
+    }
   },
   deleteEntity(maps: DocMaps, id: string): void {
     if (maps.tables.has(id)) {

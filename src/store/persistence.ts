@@ -295,7 +295,11 @@ export function saveDiagram(
 export async function deleteDiagram(id: string): Promise<boolean> {
   try {
     const res = await fetch(api(`/api/diagrams/${encodeURIComponent(id)}`), { method: 'DELETE' });
-    if (!res.ok && res.status !== 204) return false;
+    // 204 = deleted. 404 = the server has no addressable row for this id — either already gone, or
+    // a legacy/corrupt id (e.g. one with slashes) the REST route can't match. Both mean the desired
+    // server end-state ("gone") holds, so treat 404 as success and still clear the local cache;
+    // otherwise such a card could never be removed from this browser.
+    if (!res.ok && res.status !== 204 && res.status !== 404) return false;
   } catch {
     return false;
   }
