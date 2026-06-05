@@ -158,7 +158,9 @@ export function wirePath(
   // Bend (and the label pinned to it) at the TRUE midpoint between the two field anchors. Using
   // (x1 + x2) / 2 would bias it by ROUTE_GAP, since fromHoriz/toHoriz share a sign — that shifted the
   // cardinality badge ~22px off-center.
-  const midX = midXOverride ?? (sx + tx) / 2;
+  // Self-referential FK: both anchors sit on the same table edge (sx === tx), so the "midpoint"
+  // would hug the table — bulge the loop out one extra ROUTE_GAP instead.
+  const midX = midXOverride ?? (sx === tx ? sx + fromHoriz * ROUTE_GAP * 2 : (sx + tx) / 2);
   const d = `M ${sx} ${sy} L ${x1} ${sy} L ${midX} ${sy} L ${midX} ${ty} L ${x2} ${ty} L ${tx} ${ty}`;
   return {
     d,
@@ -179,6 +181,8 @@ interface RelAnchor {
   tx: number;
   ty: number;
   childIsLeft: boolean;
+  /** Self-referential FK (from/to on the same table) — routed as a U-loop off the right edge. */
+  self: boolean;
 }
 
 function relAnchor(rel: Relationship, a: Table, b: Table): RelAnchor | null {
@@ -187,12 +191,17 @@ function relAnchor(rel: Relationship, a: Table, b: Table): RelAnchor | null {
   if (ai < 0 || bi < 0) return null;
   const sy = fieldCenterY(a, ai);
   const ty = fieldCenterY(b, bi);
+  // Self-referential FK — route a U-loop off the table's right edge (childIsLeft = false).
+  if (rel.fromTableId === rel.toTableId) {
+    const edge = a.position.x + NODE_W;
+    return { sx: edge, sy, tx: edge, ty, childIsLeft: false, self: true };
+  }
   const aCenter = a.position.x + NODE_W / 2;
   const bCenter = b.position.x + NODE_W / 2;
   const childIsLeft = aCenter > bCenter;
   const sx = childIsLeft ? a.position.x : a.position.x + NODE_W;
   const tx = childIsLeft ? b.position.x + NODE_W : b.position.x;
-  return { sx, sy, tx, ty, childIsLeft };
+  return { sx, sy, tx, ty, childIsLeft, self: false };
 }
 
 function bundleKey(fromTableId: string, toTableId: string, childIsLeft: boolean): string {
@@ -233,11 +242,12 @@ export function layoutRelationshipPaths(
     const n = list.length;
     for (let i = 0; i < n; i++) {
       const { rel, anchor } = list[i]!;
-      const { sx, sy, tx, ty, childIsLeft } = anchor;
+      const { sx, sy, tx, ty, childIsLeft, self } = anchor;
       // True midpoint between the field anchors (see wirePath) — keeps the badge centered; the
-      // per-lane offset still fans parallel FKs apart around it.
-      const baseMidX = (sx + tx) / 2;
-      const laneOffset = n === 1 ? 0 : (i - (n - 1) / 2) * LANE_SPACING;
+      // per-lane offset still fans parallel FKs apart around it. Self-loops instead bulge off the
+      // table edge and fan strictly outward, so no lane folds back across the node.
+      const baseMidX = self ? sx + ROUTE_GAP * 2 : (sx + tx) / 2;
+      const laneOffset = self ? i * LANE_SPACING : n === 1 ? 0 : (i - (n - 1) / 2) * LANE_SPACING;
       // User's manual nudge (drag) stacks on top of the auto lane-stagger.
       const manual = rel.routeOffsetX ?? 0;
       out.set(rel.id, wirePath(sx, sy, tx, ty, childIsLeft, baseMidX + laneOffset + manual));
@@ -304,8 +314,8 @@ export function relPathBetween(
   if (!a || !b) return null;
   const anchor = relAnchor(rel, a, b);
   if (!anchor) return null;
-  const { sx, sy, tx, ty, childIsLeft } = anchor;
-  return wirePath(sx, sy, tx, ty, childIsLeft);
+  const { sx, sy, tx, ty, childIsLeft, self } = anchor;
+  return wirePath(sx, sy, tx, ty, childIsLeft, self ? sx + ROUTE_GAP * 2 : undefined);
 }
 
 export function relPath(rel: Relationship, byId: Record<string, Table>): RelGeometry | null {

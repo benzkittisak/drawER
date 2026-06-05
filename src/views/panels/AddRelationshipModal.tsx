@@ -30,7 +30,6 @@ function TableFieldPick({
   fieldId,
   onTable,
   onField,
-  excludeTableId,
 }: {
   label: string;
   hint: string;
@@ -39,15 +38,12 @@ function TableFieldPick({
   fieldId: string;
   onTable: (id: string) => void;
   onField: (id: string) => void;
-  excludeTableId?: string;
 }) {
   const [q, setQ] = useState('');
   const filtered = useMemo(() => {
     const qq = q.trim().toLowerCase();
-    return tables
-      .filter((t) => t.id !== excludeTableId)
-      .filter((t) => !qq || t.name.toLowerCase().includes(qq));
-  }, [tables, q, excludeTableId]);
+    return tables.filter((t) => !qq || t.name.toLowerCase().includes(qq));
+  }, [tables, q]);
 
   const table = tables.find((t) => t.id === tableId);
   const fields = table?.fields ?? [];
@@ -132,7 +128,9 @@ export function AddRelationshipModal({
     const fromT = initialFromTableId && tables.some((t) => t.id === initialFromTableId)
       ? initialFromTableId
       : tables[0].id;
-    const toT = tables.find((t) => t.id !== fromT)?.id ?? '';
+    // Prefer a different table for the referenced side, but fall back to the same table
+    // (self-referential FK) when it's the only one.
+    const toT = tables.find((t) => t.id !== fromT)?.id ?? fromT;
     const fromTable = tables.find((t) => t.id === fromT)!;
     setFromTableId(fromT);
     setFromFieldId(
@@ -150,16 +148,6 @@ export function AddRelationshipModal({
     setFromTableId(id);
     const t = tables.find((x) => x.id === id);
     setFromFieldId(t ? pickField(t, 'fk') : '');
-    if (id && id === toTableId) {
-      const other = tables.find((x) => x.id !== id);
-      if (other) {
-        setToTableId(other.id);
-        setToFieldId(pickField(other, 'pk'));
-      } else {
-        setToTableId('');
-        setToFieldId('');
-      }
-    }
     setError('');
   };
 
@@ -175,8 +163,8 @@ export function AddRelationshipModal({
       setError('Choose both tables and columns.');
       return;
     }
-    if (fromTableId === toTableId) {
-      setError('Tables must be different.');
+    if (fromTableId === toTableId && fromFieldId === toFieldId) {
+      setError('A column cannot reference itself — pick two different columns.');
       return;
     }
     const dup = rels.some(
@@ -214,14 +202,14 @@ export function AddRelationshipModal({
           <Btn variant="ghost" onClick={onClose}>
             Cancel
           </Btn>
-          <Btn variant="primary" onClick={submit} disabled={tables.length < 2}>
+          <Btn variant="primary" onClick={submit} disabled={tables.length === 0}>
             Add relationship
           </Btn>
         </>
       }
     >
-      {tables.length < 2 ? (
-        <p style={{ margin: 0, fontSize: 13, color: 'var(--ink-3)' }}>Add at least two tables before linking them.</p>
+      {tables.length === 0 ? (
+        <p style={{ margin: 0, fontSize: 13, color: 'var(--ink-3)' }}>Add a table before creating relationships.</p>
       ) : (
         <>
           <div style={{ display: 'flex', gap: 12, alignItems: 'stretch' }}>
@@ -233,7 +221,6 @@ export function AddRelationshipModal({
               fieldId={fromFieldId}
               onTable={onFromTable}
               onField={setFromFieldId}
-              excludeTableId={toTableId}
             />
             <div style={{ display: 'grid', placeItems: 'center', color: 'var(--ink-3)', fontSize: 18, paddingTop: 28 }}>→</div>
             <TableFieldPick
@@ -244,7 +231,6 @@ export function AddRelationshipModal({
               fieldId={toFieldId}
               onTable={onToTable}
               onField={setToFieldId}
-              excludeTableId={fromTableId}
             />
           </div>
 

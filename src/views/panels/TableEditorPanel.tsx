@@ -247,12 +247,30 @@ export function TableEditorPanel({
   const [selectedFields, setSelectedFields] = useState<Set<string>>(new Set());
   const anchorRef = useRef<string | null>(null);
   const [recentColors, setRecentColors] = useState(getRecentColors);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const [listOverflows, setListOverflows] = useState(false);
 
   // Clear the column multi-selection when switching to a different table.
   useEffect(() => {
     setSelectedFields(new Set());
     anchorRef.current = null;
   }, [tableId]);
+
+  // Show a second Add-column button at the bottom when the column list is taller than the sidebar,
+  // so long tables don't force a scroll back to the top to add a column.
+  useEffect(() => {
+    const pane = rootRef.current?.closest('.panel__body');
+    if (section !== 'columns' || !(pane instanceof HTMLElement)) {
+      setListOverflows(false);
+      return;
+    }
+    const check = () => setListOverflows(pane.scrollHeight > pane.clientHeight + 1);
+    check();
+    const ro = new ResizeObserver(check);
+    ro.observe(pane);
+    if (rootRef.current) ro.observe(rootRef.current);
+    return () => ro.disconnect();
+  }, [section]);
 
   if (!table) {
     return <div className="te-empty">This table no longer exists.</div>;
@@ -326,6 +344,16 @@ export function TableEditorPanel({
     return `${t?.name ?? '?'}.${t?.fields.find((x) => x.id === r.toFieldId)?.name ?? '?'}`;
   };
 
+  const addColumn = () => addField(table.id, createField(newId(), `field_${table.fields.length + 1}`, 'varchar'));
+  // Bottom button: keep the new row + button in view after the list grows.
+  const addColumnAtBottom = () => {
+    addColumn();
+    requestAnimationFrame(() => {
+      const pane = rootRef.current?.closest('.panel__body');
+      if (pane instanceof HTMLElement) pane.scrollTop = pane.scrollHeight;
+    });
+  };
+
   const addNewIndex = () => {
     const n = table.indices.length + 1;
     const firstField = table.fields[0]?.id;
@@ -336,7 +364,7 @@ export function TableEditorPanel({
   };
 
   return (
-    <div className="te-root">
+    <div className="te-root" ref={rootRef}>
       <div className="te-section-tabs" role="tablist" aria-label="Table editor sections">
         {(['general', 'columns', 'indexes'] as const).map((s) => (
           <button
@@ -410,13 +438,7 @@ export function TableEditorPanel({
 
       {section === 'columns' && (
         <div className="te-section">
-          <Btn
-            sm
-            variant="ghost"
-            icon="plus"
-            style={{ color: 'var(--accent-strong)', alignSelf: 'flex-start' }}
-            onClick={() => addField(table.id, createField(newId(), `field_${table.fields.length + 1}`, 'varchar'))}
-          >
+          <Btn sm variant="ghost" icon="plus" style={{ color: 'var(--accent-strong)', alignSelf: 'flex-start' }} onClick={addColumn}>
             Add column
           </Btn>
           <p className="te-hint">Click a handle to select; Shift / ⌘-click for several, then drag to reorder.</p>
@@ -455,6 +477,11 @@ export function TableEditorPanel({
             })}
             {table.fields.length === 0 && <div className="te-empty">No columns yet.</div>}
           </div>
+          {listOverflows && (
+            <Btn sm variant="ghost" icon="plus" style={{ color: 'var(--accent-strong)', alignSelf: 'flex-start' }} onClick={addColumnAtBottom}>
+              Add column
+            </Btn>
+          )}
         </div>
       )}
 

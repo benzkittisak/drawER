@@ -5,6 +5,7 @@ import {
   LANE_SPACING,
   layoutRelationshipPaths,
   nextRelationshipFocusSide,
+  NODE_W,
   orderRelsForPaint,
   snapCamera,
 } from './geometry';
@@ -109,6 +110,25 @@ describe('layoutRelationshipPaths', () => {
     expect(g2).toBeTruthy();
     expect(g1!.labelX).not.toBe(g2!.labelX);
     expect(Math.abs(g1!.labelX - g2!.labelX)).toBe(LANE_SPACING);
+  });
+
+  it('routes a self-referential FK as a U-loop off the table right edge', () => {
+    const emp = createTable('emp', 'employee', {
+      position: { x: 100, y: 100 },
+      fields: [
+        createField('e1', 'id', 'int4', { primary: true }),
+        createField('e2', 'manager_id', 'int4'),
+      ],
+    });
+    const rel = createRelationship('s1', { tableId: 'emp', fieldId: 'e2' }, { tableId: 'emp', fieldId: 'e1' });
+    const g = layoutRelationshipPaths([rel], { emp })!.get('s1')!;
+    const rightEdge = 100 + NODE_W;
+    expect(g.sx).toBe(rightEdge); // both anchors on the right edge
+    expect(g.tx).toBe(rightEdge);
+    expect(g.sy).not.toBe(g.ty); // distinct field rows
+    expect(g.labelX).toBeGreaterThan(rightEdge); // loop bulges outside the node
+    expect(g.fromHoriz).toBe(1);
+    expect(g.toHoriz).toBe(1);
   });
 
   it('shifts an edge by its manual routeOffsetX', () => {

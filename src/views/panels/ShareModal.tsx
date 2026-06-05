@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useConnection, useIdentity, useOthers } from '@store';
 import { Icon } from '@ui/Icon';
 import { Avatar, Btn, Modal } from '@ui/atoms';
+import { copyToClipboard } from '@ui/clipboard';
 
 const initials = (n: string): string =>
   n.split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase() || 'NA';
@@ -37,12 +38,9 @@ export function ShareModal({ onClose }: { onClose: () => void }) {
 
   const copyText = async (text: string, which: 'link' | 'embed') => {
     if (!text) return;
-    try {
-      await navigator.clipboard.writeText(text);
+    if (await copyToClipboard(text)) {
       setCopied(which);
       setTimeout(() => setCopied(null), 1500);
-    } catch {
-      /* clipboard unavailable */
     }
   };
 

@@ -402,9 +402,12 @@ button { font-family: inherit; cursor: pointer; }
 .node__grip:hover { transform: scale(1.25); }
 .node__grip.fk { background: var(--accent); }
 .node__fname { flex: 1; font-weight: 500; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.node__fname.fk { font-weight: 600; }
 .node__fname.pk { font-weight: 700; }
 .node__ftype { font-family: var(--mono); font-size: 11px; color: var(--ink-3); }
 .node__key { color: var(--accent); }
+/* FK marker — mirrors the PK key icon so foreign keys read at a glance (link icon, softer accent). */
+.node__fk { color: var(--accent); opacity: .75; flex: none; }
 /* Level-of-detail placeholder shown instead of field rows when zoomed far out (see TableNode). */
 .node__lod {
   display: flex; align-items: center; justify-content: center;

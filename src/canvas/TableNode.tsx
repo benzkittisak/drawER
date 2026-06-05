@@ -112,7 +112,10 @@ export const TableNode = memo(function TableNode({
                 />
               )}
               {f.primary && <Icon name="key" size={13} className="node__key" />}
-              <div className={'node__fname' + (f.primary ? ' pk' : '')}>{f.name}</div>
+              {fk && <Icon name="link" size={13} className="node__fk" />}
+              <div className={'node__fname' + (fk ? ' fk' : '') + (f.primary ? ' pk' : '')}>
+                {f.name}
+              </div>
               <div className="node__ftype">
                 {f.type}
                 {f.array ? '[]' : ''}

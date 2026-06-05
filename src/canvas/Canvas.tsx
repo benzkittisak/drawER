@@ -427,13 +427,14 @@ export function Canvas({
         }
         clearRoutePaint();
       } else if (d.mode === 'link') {
-        // Complete the relationship if released over another table's field row.
+        // Complete the relationship if released over a field row — same table is allowed
+        // (self-referential FK, e.g. employee.manager_id → employee.id), same field is not.
         const target = (document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null)?.closest(
           '[data-fid]',
         ) as HTMLElement | null;
         const tid = target?.dataset.tid;
         const fid = target?.dataset.fid;
-        if (tid && fid && tid !== d.fromT) {
+        if (tid && fid && !(tid === d.fromT && fid === d.fromF)) {
           const id = newId();
           actions.addRelationship(
             createRelationship(id, { tableId: d.fromT, fieldId: d.fromF }, { tableId: tid, fieldId: fid }, {

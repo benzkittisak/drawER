@@ -16,6 +16,7 @@ import {
 import { useDiagram } from '@store';
 import { Icon } from '@ui/Icon';
 import { Btn, Modal } from '@ui/atoms';
+import { copyToClipboard } from '@ui/clipboard';
 
 type Format = 'sql' | 'dbml' | 'mermaid' | 'markdown' | 'json';
 const FORMATS: { id: Format; label: string; ext: string }[] = [
@@ -48,12 +49,9 @@ export function ExportModal({ onClose }: { onClose: () => void }) {
   }, [diagram, format, dialect]);
 
   const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(content);
+    if (await copyToClipboard(content)) {
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
-    } catch {
-      /* clipboard unavailable */
     }
   };
 

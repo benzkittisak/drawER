@@ -24,6 +24,7 @@ export async function autoLayout(diagram: Diagram): Promise<Diagram> {
     g.setNode(t.id, { width: NODE_W, height: tableHeight(t) });
   }
   for (const r of diagram.relationships) {
+    if (r.fromTableId === r.toTableId) continue; // self-FK doesn't influence placement
     if (diagram.tables.some((t) => t.id === r.fromTableId) && diagram.tables.some((t) => t.id === r.toTableId)) {
       g.setEdge(r.fromTableId, r.toTableId);
     }
