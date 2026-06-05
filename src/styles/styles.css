@@ -50,6 +50,9 @@
 
 * { box-sizing: border-box; }
 html, body, #root { height: 100%; }
+/* A two-finger horizontal swipe (macOS) over panels/canvas must pan the app, never trigger the
+   browser's back/forward navigation gesture. */
+html, body { overscroll-behavior-x: none; }
 body {
   margin: 0;
   font-family: var(--font);
@@ -721,6 +724,10 @@ button { font-family: inherit; cursor: pointer; }
   transition: border-color .12s, box-shadow .12s, opacity .12s;
 }
 .field-editor__row--dragging { opacity: .45; }
+.field-editor__row--selected {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
 .field-editor__row--over {
   border-color: var(--accent);
   box-shadow: 0 0 0 2px var(--accent-ring);

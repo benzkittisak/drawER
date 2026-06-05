@@ -41,6 +41,18 @@ describe('Yjs schema mapping', () => {
     expect(after.relationships).toEqual([]); // FK to orgs removed with the table
   });
 
+  it('reorders multiple fields at once to a new permutation', () => {
+    const { doc, maps } = docWithSample();
+    const order = ['u_email', 'u_role', 'u_id', 'u_org', 'u_created'];
+    doc.transact(() => mut.reorderFields(maps, 'users', order));
+    const users = readDiagram(maps).tables.find((t) => t.id === 'users')!;
+    expect(users.fields.map((f) => f.id)).toEqual(order);
+
+    // A non-permutation (missing an id) is rejected to avoid dropping columns.
+    doc.transact(() => mut.reorderFields(maps, 'users', ['u_email', 'u_role']));
+    expect(readDiagram(maps).tables.find((t) => t.id === 'users')!.fields.map((f) => f.id)).toEqual(order);
+  });
+
   it('removing a referenced field drops the relationship', () => {
     const { doc, maps } = docWithSample();
     doc.transact(() => mut.removeField(maps, 'users', 'u_org'));

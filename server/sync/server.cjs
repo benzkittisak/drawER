@@ -18,7 +18,7 @@ const { Pool } = require('pg');
 const { WebSocketServer } = require('ws');
 const Y = require('yjs');
 
-const { setupWSConnection, setPersistence } = require(
+const { setupWSConnection, setPersistence, docs } = require(
   path.join(__dirname, '..', '..', 'node_modules', 'y-websocket', 'bin', 'utils.cjs'),
 );
 const dbIntrospectPath = path.join(__dirname, '..', 'db-introspect', 'index.cjs');
@@ -46,6 +46,11 @@ const pool = new Pool({
   connectionTimeoutMillis: 5000,
 });
 const timers = new Map();
+// Doc names deleted via the REST API. While a deleted room's doc is still alive in memory
+// (clients connected), its update/close persists would silently re-INSERT the row — the
+// "deleted diagram reappears" bug. Tombstoned names skip persistence until the diagram is
+// explicitly recreated (new ws open of the room, or a REST PUT).
+const deletedDocs = new Set();
 
 async function initDb() {
   await pool.query(`
@@ -69,6 +74,7 @@ async function loadDoc(name) {
 }
 
 async function persist(docName, ydoc) {
+  if (deletedDocs.has(docName)) return;
   const update = Y.encodeStateAsUpdate(ydoc);
   const meta = ydoc.getMap('meta');
   const displayName = meta.get('name') || 'Untitled diagram';
@@ -100,6 +106,8 @@ function schedulePersist(docName, ydoc) {
 setPersistence({
   provider: null,
   bindState: async (docName, ydoc) => {
+    // A fresh open of a previously deleted room is a legitimate re-creation.
+    deletedDocs.delete(docName);
     const row = await loadDoc(docName);
     if (row?.data) Y.applyUpdate(ydoc, new Uint8Array(row.data));
     ydoc.on('update', () => schedulePersist(docName, ydoc));
@@ -252,6 +260,8 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'PUT' && idMatch) {
       const body = await readJsonBody(req);
       const docName = `drawer-${diagramId}`;
+      deletedDocs.delete(docName); // explicit upload = re-creation
+
       const displayName = body.name || 'Untitled diagram';
       const dialect = body.dialect || 'postgres';
       const tableCount = Number.isFinite(body.tableCount) ? body.tableCount : 0;
@@ -286,7 +296,20 @@ const server = http.createServer(async (req, res) => {
       return;
     }
     if (req.method === 'DELETE' && idMatch) {
-      await pool.query('DELETE FROM docs WHERE name = $1', [`drawer-${diagramId}`]);
+      const docName = `drawer-${diagramId}`;
+      // Kill the in-memory room BEFORE deleting the row, or its pending debounce / on-close
+      // writeState would re-INSERT the diagram moments later (it "came back" after deletion).
+      deletedDocs.add(docName);
+      clearTimeout(timers.get(docName));
+      timers.delete(docName);
+      const doc = docs.get(docName);
+      if (doc) {
+        // Closing every conn lets y-websocket run its normal teardown (writeState is a no-op
+        // thanks to the tombstone, then the doc is destroyed and unregistered).
+        for (const conn of doc.conns.keys()) conn.close();
+        docs.delete(docName);
+      }
+      await pool.query('DELETE FROM docs WHERE name = $1', [docName]);
       res.statusCode = 204;
       res.end();
       return;

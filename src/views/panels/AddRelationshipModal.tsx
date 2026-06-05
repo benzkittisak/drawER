@@ -107,9 +107,12 @@ function TableFieldPick({
 export function AddRelationshipModal({
   onClose,
   fromTableId: initialFromTableId,
+  fromFieldId: initialFromFieldId,
 }: {
   onClose: () => void;
   fromTableId?: string;
+  /** Pre-select this column as the FK side (must belong to `fromTableId`). */
+  fromFieldId?: string;
 }) {
   const tables = useTables();
   const rels = useRelationships();
@@ -130,13 +133,18 @@ export function AddRelationshipModal({
       ? initialFromTableId
       : tables[0].id;
     const toT = tables.find((t) => t.id !== fromT)?.id ?? '';
+    const fromTable = tables.find((t) => t.id === fromT)!;
     setFromTableId(fromT);
-    setFromFieldId(pickField(tables.find((t) => t.id === fromT)!, 'fk'));
+    setFromFieldId(
+      initialFromFieldId && fromTable.fields.some((f) => f.id === initialFromFieldId)
+        ? initialFromFieldId
+        : pickField(fromTable, 'fk'),
+    );
     if (toT) {
       setToTableId(toT);
       setToFieldId(pickField(tables.find((t) => t.id === toT)!, 'pk'));
     }
-  }, [initialFromTableId, tables]);
+  }, [initialFromTableId, initialFromFieldId, tables]);
 
   const onFromTable = (id: string) => {
     setFromTableId(id);

@@ -47,6 +47,8 @@ export interface EditorState {
 
   // diagram lifecycle (open a diagram's Yjs doc)
   loadDiagram: (d: Diagram) => void;
+  /** Close the live session + reset editor state (returning to the dashboard). */
+  closeDiagram: () => void;
   setReadonly: (flag: boolean) => void;
 
   // diagram mutations
@@ -59,6 +61,7 @@ export interface EditorState {
   updateField: (tableId: Id, fieldId: Id, patch: Partial<Omit<Field, 'id'>>) => void;
   removeField: (tableId: Id, fieldId: Id) => void;
   reorderField: (tableId: Id, fieldId: Id, toIndex: number) => void;
+  reorderFields: (tableId: Id, orderedFieldIds: Id[]) => void;
   addIndex: (tableId: Id, index: Index) => void;
   updateIndex: (tableId: Id, indexId: Id, patch: Partial<Omit<Index, 'id'>>) => void;
   removeIndex: (tableId: Id, indexId: Id) => void;
@@ -116,6 +119,18 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     void session.open(d, (snap) => set({ diagram: snap }));
   },
 
+  closeDiagram: () => {
+    session.close();
+    set({
+      diagram: EMPTY,
+      selected: null,
+      selectedRel: null,
+      others: [],
+      comments: [],
+      activity: [],
+    });
+  },
+
   setReadonly: (flag) => {
     session.setReadonly(flag);
     set({ readonly: flag, tool: flag ? 'pan' : get().tool });
@@ -162,6 +177,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   reorderField: (tableId, fieldId, toIndex) => {
     if (!canMutate(get)) return;
     session.transact((m) => mut.reorderField(m, tableId, fieldId, toIndex));
+  },
+  reorderFields: (tableId, orderedFieldIds) => {
+    if (!canMutate(get)) return;
+    session.transact((m) => mut.reorderFields(m, tableId, orderedFieldIds));
   },
   addIndex: (tableId, index) => {
     if (!canMutate(get)) return;

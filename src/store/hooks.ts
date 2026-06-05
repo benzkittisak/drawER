@@ -84,6 +84,7 @@ export function useEditorActions() {
       updateField: s.updateField,
       removeField: s.removeField,
       reorderField: s.reorderField,
+      reorderFields: s.reorderFields,
       addIndex: s.addIndex,
       updateIndex: s.updateIndex,
       removeIndex: s.removeIndex,

@@ -25,7 +25,7 @@ function columnLine(table: Table, fieldId: string, pkFieldIds: Set<string>, fkFi
   const f = table.fields.find((x) => x.id === fieldId);
   if (!f) return '';
   const keys = [pkFieldIds.has(f.id) ? 'PK' : '', fkFieldIds.has(f.id) ? 'FK' : ''].filter(Boolean).join(',');
-  const type = ident(f.type);
+  const type = ident(f.type) + (f.array ? '[]' : '');
   return `    ${type} ${ident(f.name)}${keys ? ' ' + keys : ''}`;
 }
 

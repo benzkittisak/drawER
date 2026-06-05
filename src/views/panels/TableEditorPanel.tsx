@@ -2,11 +2,12 @@
  * TableEditorPanel — edit the selected table in the right sidebar: general settings,
  * columns (with per-field index toggle), and composite indexes. All edits via @store (Yjs).
  */
-import { useState, type DragEvent } from 'react';
-import { TYPE_KEYS, createField, createIndex, newId, type Field, type Index, type Table } from '@core';
-import { addRecentColor, getRecentColors, useEditorActions, useTable } from '@store';
+import { useEffect, useRef, useState, type DragEvent, type MouseEvent } from 'react';
+import { TYPE_KEYS, createField, createIndex, newId, type Field, type Index, type Relationship, type Table } from '@core';
+import { addRecentColor, getRecentColors, useEditorActions, useRelationships, useTable, useTables } from '@store';
 import { Icon } from '@ui/Icon';
 import { Btn } from '@ui/atoms';
+import { DraftInput, DraftTextarea } from '@ui/DraftInput';
 
 const COLORS = ['#6366f1', '#0d9488', '#d97706', '#e11d48', '#7c3aed', '#0284c7', '#16a34a', '#57534e'];
 
@@ -46,8 +47,10 @@ function FieldRow({
   table,
   field,
   index,
-  dragId,
-  overIndex,
+  dragging,
+  dropTarget,
+  selected,
+  onSelect,
   onDragStart,
   onDragOver,
   onDrop,
@@ -55,12 +58,17 @@ function FieldRow({
   updateField,
   removeField,
   toggleFieldIndex,
+  fkOn,
+  fkTitle,
+  onToggleFk,
 }: {
   table: Table;
   field: Field;
   index: number;
-  dragId: string | null;
-  overIndex: number | null;
+  dragging: boolean;
+  dropTarget: boolean;
+  selected: boolean;
+  onSelect: (fieldId: string, e: MouseEvent) => void;
   onDragStart: (fieldId: string) => void;
   onDragOver: (index: number) => void;
   onDrop: (index: number) => void;
@@ -68,15 +76,17 @@ function FieldRow({
   updateField: ReturnType<typeof useEditorActions>['updateField'];
   removeField: ReturnType<typeof useEditorActions>['removeField'];
   toggleFieldIndex: ReturnType<typeof useEditorActions>['toggleFieldIndex'];
+  fkOn: boolean;
+  fkTitle: string;
+  onToggleFk: () => void;
 }) {
-  const dragging = dragId === field.id;
-  const dropTarget = dragId !== null && dragId !== field.id && overIndex === index;
   const indexed = fieldIndexed(table, field.id);
 
   return (
     <div
       className={
         'field-editor__row field-editor__row--compact' +
+        (selected ? ' field-editor__row--selected' : '') +
         (dragging ? ' field-editor__row--dragging' : '') +
         (dropTarget ? ' field-editor__row--over' : '')
       }
@@ -93,7 +103,8 @@ function FieldRow({
       <div
         className="field-editor__grip"
         draggable
-        title="Drag to reorder"
+        title="Click to select · Shift / ⌘-click for many · drag to reorder"
+        onClick={(e) => onSelect(field.id, e)}
         onDragStart={(e: DragEvent) => {
           e.dataTransfer.effectAllowed = 'move';
           e.dataTransfer.setData('text/plain', field.id);
@@ -101,14 +112,14 @@ function FieldRow({
         }}
         onDragEnd={onDragEnd}
       >
-        <Icon name="moreH" size={14} />
+        <Icon name="grip" size={16} />
       </div>
       <div className="field-editor__grid">
-        <input
+        <DraftInput
           className="input input--sm"
           value={field.name}
           placeholder="column_name"
-          onChange={(e) => updateField(table.id, field.id, { name: e.target.value })}
+          onChange={(v) => updateField(table.id, field.id, { name: v })}
         />
         <select
           className="te-type"
@@ -123,6 +134,7 @@ function FieldRow({
         </select>
         <div className="field-editor__flags">
           <Flag on={field.primary} label="PK" title="Primary key" onClick={() => updateField(table.id, field.id, { primary: !field.primary })} />
+          <Flag on={fkOn} label="FK" title={fkTitle} onClick={onToggleFk} />
           <Flag on={field.notNull} label="NN" title="Not null" onClick={() => updateField(table.id, field.id, { notNull: !field.notNull })} />
           <Flag on={field.unique} label="UQ" title="Unique" onClick={() => updateField(table.id, field.id, { unique: !field.unique })} />
           <Flag
@@ -136,6 +148,12 @@ function FieldRow({
             label="IX"
             title={indexed ? 'Remove from index(es)' : 'Add index on this column'}
             onClick={() => toggleFieldIndex(table.id, field.id)}
+          />
+          <Flag
+            on={!!field.array}
+            label="[ ]"
+            title="Array type (e.g. text[])"
+            onClick={() => updateField(table.id, field.id, { array: !field.array || undefined })}
           />
           <Btn iconOnly sm variant="ghost" icon="trash" title="Remove column" onClick={() => removeField(table.id, field.id)} />
         </div>
@@ -165,11 +183,11 @@ function IndexCard({
   return (
     <div className="index-card">
       <div className="index-card__head">
-        <input
+        <DraftInput
           className="input input--sm"
           value={index.name}
           placeholder="index_name"
-          onChange={(e) => updateIndex(table.id, index.id, { name: e.target.value })}
+          onChange={(v) => updateIndex(table.id, index.id, { name: v })}
         />
         <label className="index-card__unique" title="Unique index">
           <input
@@ -205,15 +223,18 @@ export function TableEditorPanel({
 }: {
   tableId: string;
   onDeleted?: () => void;
-  onAddForeignKey?: () => void;
+  /** Open the Add-relationship modal; `fieldId` pre-selects that column as the FK side. */
+  onAddForeignKey?: (fieldId?: string) => void;
 }) {
   const table = useTable(tableId);
+  const tables = useTables();
+  const rels = useRelationships();
   const {
     updateTable,
     addField,
     updateField,
     removeField,
-    reorderField,
+    reorderFields,
     addIndex,
     updateIndex,
     removeIndex,
@@ -221,28 +242,88 @@ export function TableEditorPanel({
     deleteEntity,
   } = useEditorActions();
   const [section, setSection] = useState<Section>('columns');
-  const [dragId, setDragId] = useState<string | null>(null);
+  const [dragIds, setDragIds] = useState<Set<string>>(new Set());
   const [overIndex, setOverIndex] = useState<number | null>(null);
+  const [selectedFields, setSelectedFields] = useState<Set<string>>(new Set());
+  const anchorRef = useRef<string | null>(null);
   const [recentColors, setRecentColors] = useState(getRecentColors);
+
+  // Clear the column multi-selection when switching to a different table.
+  useEffect(() => {
+    setSelectedFields(new Set());
+    anchorRef.current = null;
+  }, [tableId]);
 
   if (!table) {
     return <div className="te-empty">This table no longer exists.</div>;
   }
 
   const endDrag = () => {
-    setDragId(null);
+    setDragIds(new Set());
     setOverIndex(null);
   };
 
+  // Click a column's grip to select it; Shift = range from the anchor, ⌘/Ctrl = toggle, plain = single.
+  const selectField = (fieldId: string, e: MouseEvent) => {
+    const ids = table.fields.map((f) => f.id);
+    if (e.shiftKey && anchorRef.current) {
+      const a = ids.indexOf(anchorRef.current);
+      const b = ids.indexOf(fieldId);
+      if (a >= 0 && b >= 0) {
+        const [lo, hi] = a < b ? [a, b] : [b, a];
+        setSelectedFields(new Set(ids.slice(lo, hi + 1)));
+        return;
+      }
+    }
+    if (e.metaKey || e.ctrlKey) {
+      const next = new Set(selectedFields);
+      if (next.has(fieldId)) next.delete(fieldId);
+      else next.add(fieldId);
+      setSelectedFields(next);
+    } else {
+      setSelectedFields(new Set([fieldId]));
+    }
+    anchorRef.current = fieldId;
+  };
+
+  // Begin a drag: move the whole selection if the grabbed column is part of a multi-selection,
+  // otherwise just the grabbed column (and collapse the selection to it).
+  const beginDrag = (fieldId: string) => {
+    if (selectedFields.has(fieldId) && selectedFields.size > 1) {
+      setDragIds(new Set(selectedFields));
+    } else {
+      setDragIds(new Set([fieldId]));
+      setSelectedFields(new Set([fieldId]));
+      anchorRef.current = fieldId;
+    }
+  };
+
   const dropOn = (toIndex: number) => {
-    if (!dragId) return;
-    const fromIndex = table.fields.findIndex((f) => f.id === dragId);
-    if (fromIndex < 0 || fromIndex === toIndex) {
+    if (dragIds.size === 0) {
       endDrag();
       return;
     }
-    reorderField(table.id, dragId, toIndex);
+    const ids = table.fields.map((f) => f.id);
+    const moving = ids.filter((id) => dragIds.has(id));
+    const remaining = ids.filter((id) => !dragIds.has(id));
+    const targetId = ids[toIndex];
+    const insertAt =
+      targetId == null
+        ? remaining.length
+        : dragIds.has(targetId)
+          ? ids.slice(0, toIndex).filter((id) => !dragIds.has(id)).length
+          : remaining.indexOf(targetId);
+    const next = [...remaining.slice(0, insertAt), ...moving, ...remaining.slice(insertAt)];
+    if (next.join(' ') !== ids.join(' ')) reorderFields(table.id, next);
     endDrag();
+  };
+
+  // Relationships where a column of this table is the child (FK) side, and a readable target label.
+  const fieldFks = (fieldId: string): Relationship[] =>
+    rels.filter((r) => r.fromTableId === table.id && r.fromFieldId === fieldId);
+  const fkTarget = (r: Relationship): string => {
+    const t = tables.find((x) => x.id === r.toTableId);
+    return `${t?.name ?? '?'}.${t?.fields.find((x) => x.id === r.toFieldId)?.name ?? '?'}`;
   };
 
   const addNewIndex = () => {
@@ -275,16 +356,16 @@ export function TableEditorPanel({
         <div className="te-section">
           <label className="te-label">
             Table name
-            <input className="input input--sm" value={table.name} onChange={(e) => updateTable(table.id, { name: e.target.value })} />
+            <DraftInput className="input input--sm" value={table.name} onChange={(v) => updateTable(table.id, { name: v })} />
           </label>
           <label className="te-label">
             Description
-            <textarea
+            <DraftTextarea
               className="te-textarea"
               value={table.comment ?? ''}
               placeholder="What is this table for? (purpose, owner, notes…)"
               rows={4}
-              onChange={(e) => updateTable(table.id, { comment: e.target.value })}
+              onChange={(v) => updateTable(table.id, { comment: v })}
             />
           </label>
           <div className="te-label">Color</div>
@@ -309,7 +390,7 @@ export function TableEditorPanel({
             </label>
           </div>
           {onAddForeignKey && (
-            <Btn sm variant="ghost" icon="link" style={{ marginTop: 8, alignSelf: 'flex-start' }} onClick={onAddForeignKey}>
+            <Btn sm variant="ghost" icon="link" style={{ marginTop: 8, alignSelf: 'flex-start' }} onClick={() => onAddForeignKey()}>
               Add foreign key…
             </Btn>
           )}
@@ -338,25 +419,40 @@ export function TableEditorPanel({
           >
             Add column
           </Btn>
-          <p className="te-hint">Drag the handle to reorder. Use IX for a quick single-column index.</p>
+          <p className="te-hint">Click a handle to select; Shift / ⌘-click for several, then drag to reorder.</p>
           <div className="field-editor__list">
-            {table.fields.map((f, i) => (
-              <FieldRow
-                key={f.id}
-                table={table}
-                field={f}
-                index={i}
-                dragId={dragId}
-                overIndex={overIndex}
-                onDragStart={setDragId}
-                onDragOver={setOverIndex}
-                onDrop={dropOn}
-                onDragEnd={endDrag}
-                updateField={updateField}
-                removeField={removeField}
-                toggleFieldIndex={toggleFieldIndex}
-              />
-            ))}
+            {table.fields.map((f, i) => {
+              const fks = fieldFks(f.id);
+              return (
+                <FieldRow
+                  key={f.id}
+                  table={table}
+                  field={f}
+                  index={i}
+                  selected={selectedFields.has(f.id)}
+                  dragging={dragIds.has(f.id)}
+                  dropTarget={dragIds.size > 0 && overIndex === i && !dragIds.has(f.id)}
+                  onSelect={selectField}
+                  onDragStart={beginDrag}
+                  onDragOver={setOverIndex}
+                  onDrop={dropOn}
+                  onDragEnd={endDrag}
+                  updateField={updateField}
+                  removeField={removeField}
+                  toggleFieldIndex={toggleFieldIndex}
+                  fkOn={fks.length > 0}
+                  fkTitle={
+                    fks.length > 0
+                      ? `Foreign key → ${fks.map(fkTarget).join(', ')} — click to remove`
+                      : 'Add foreign key — pick the referenced table'
+                  }
+                  onToggleFk={() => {
+                    if (fks.length > 0) fks.forEach((r) => deleteEntity(r.id));
+                    else onAddForeignKey?.(f.id);
+                  }}
+                />
+              );
+            })}
             {table.fields.length === 0 && <div className="te-empty">No columns yet.</div>}
           </div>
         </div>

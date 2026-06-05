@@ -19,11 +19,14 @@ const GENERIC: Record<string, string> = {
   ENUM: 'enum',
 };
 
-export function reverseType(raw: string): { key: string; autoIncrement: boolean } {
-  const u = raw.toUpperCase().trim();
-  if (u === 'SERIAL') return { key: 'int4', autoIncrement: true };
-  if (u === 'BIGSERIAL') return { key: 'int8', autoIncrement: true };
-  if (u === 'SMALLSERIAL') return { key: 'int2', autoIncrement: true };
+export function reverseType(raw: string): { key: string; autoIncrement: boolean; array?: boolean } {
+  let u = raw.toUpperCase().trim();
+  // Detect (and strip) an array suffix, e.g. `TEXT[]` / `INT4[]`.
+  const array = u.endsWith('[]') ? true : undefined;
+  if (array) u = u.slice(0, -2).trim();
+  if (u === 'SERIAL') return { key: 'int4', autoIncrement: true, array };
+  if (u === 'BIGSERIAL') return { key: 'int8', autoIncrement: true, array };
+  if (u === 'SMALLSERIAL') return { key: 'int2', autoIncrement: true, array };
   const base = u.split('(')[0].trim();
-  return { key: GENERIC[u] ?? GENERIC[base] ?? base.toLowerCase(), autoIncrement: false };
+  return { key: GENERIC[u] ?? GENERIC[base] ?? base.toLowerCase(), autoIncrement: false, array };
 }

@@ -26,7 +26,7 @@ export function buildDiagramFromNeutral(schema: NeutralSchema, dialect: DialectI
     const fields = t.columns.map((c) => {
       const fieldId = newId();
       fieldIdByName.set(`${t.name}.${c.name}`, fieldId);
-      const { key, autoIncrement } = reverseType(c.dataType);
+      const { key, autoIncrement, array } = reverseType(c.dataType);
       return createField(fieldId, c.name, key, {
         primary: c.primary || pkSet.has(c.name),
         notNull: c.notNull,
@@ -34,6 +34,7 @@ export function buildDiagramFromNeutral(schema: NeutralSchema, dialect: DialectI
         autoIncrement: c.autoIncrement || autoIncrement,
         size: c.size,
         scale: c.scale,
+        array,
         default: c.default,
       });
     });

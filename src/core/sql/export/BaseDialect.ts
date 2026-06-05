@@ -48,6 +48,10 @@ export abstract class BaseDialect implements Dialect {
   supportsSchemas(): boolean {
     return true;
   }
+  /** Whether this dialect has native array column types (e.g. Postgres `text[]`). */
+  supportsArray(): boolean {
+    return false;
+  }
 
   /** Fallback string type for enums when the dialect lacks enum support. */
   protected stringType(): string {
@@ -84,6 +88,8 @@ export abstract class BaseDialect implements Dialect {
       name +=
         def.hasScale && field.scale != null ? `(${field.size},${field.scale})` : `(${field.size})`;
     }
+    // Array suffix only for dialects with native array types (Postgres); others emit the base type.
+    if (field.array && this.supportsArray()) name += '[]';
     return name;
   }
 

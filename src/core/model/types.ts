@@ -30,6 +30,8 @@ export interface Field {
   unique: boolean;
   notNull: boolean;
   autoIncrement: boolean;
+  /** True when the column is an array type, e.g. Postgres `text[]`. */
+  array?: boolean;
   default?: string;
   comment?: string;
   customTypeId?: Id;

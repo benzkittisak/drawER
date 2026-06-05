@@ -46,10 +46,10 @@ interface DbmlDatabase {
   schemas: DbmlSchema[];
 }
 
-function parseType(type?: { type_name?: string; args?: string | null }): { key: string; size?: number; scale?: number; autoIncrement: boolean } {
+function parseType(type?: { type_name?: string; args?: string | null }): { key: string; size?: number; scale?: number; autoIncrement: boolean; array?: boolean } {
   const raw = type?.type_name ?? 'text';
   const base = raw.split('(')[0].trim();
-  const { key, autoIncrement } = reverseType(base);
+  const { key, autoIncrement, array } = reverseType(base);
   let size: number | undefined;
   let scale: number | undefined;
   const args = type?.args ?? (raw.includes('(') ? raw.slice(raw.indexOf('(') + 1, raw.indexOf(')')) : undefined);
@@ -58,7 +58,7 @@ function parseType(type?: { type_name?: string; args?: string | null }): { key: 
     if (!Number.isNaN(parts[0])) size = parts[0];
     if (parts.length > 1 && !Number.isNaN(parts[1])) scale = parts[1];
   }
-  return { key, size, scale, autoIncrement };
+  return { key, size, scale, autoIncrement, array };
 }
 
 function noteText(n: DbmlField['note']): string | undefined {
@@ -103,7 +103,7 @@ export async function dbmlToDiagram(dbml: string, dialect: DialectId = 'postgres
     const fields = t.fields.map((f) => {
       const fieldId = newId();
       fieldIdByName.set(`${t.name}.${f.name}`, fieldId);
-      const { key, size, scale, autoIncrement } = parseType(f.type);
+      const { key, size, scale, autoIncrement, array } = parseType(f.type);
       const dflt = f.dbdefault?.value;
       return createField(fieldId, f.name, key, {
         primary: !!f.pk,
@@ -112,6 +112,7 @@ export async function dbmlToDiagram(dbml: string, dialect: DialectId = 'postgres
         autoIncrement: !!f.increment || autoIncrement,
         size,
         scale,
+        array,
         default: dflt == null ? undefined : String(dflt),
         comment: noteText(f.note),
       });

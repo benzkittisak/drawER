@@ -76,6 +76,7 @@
         "unique": { "type": "boolean" },
         "notNull": { "type": "boolean" },
         "autoIncrement": { "type": "boolean" },
+        "array": { "type": "boolean" },
         "default": { "type": "string" },
         "comment": { "type": "string" },
         "customTypeId": { "$ref": "#/$defs/Id" }

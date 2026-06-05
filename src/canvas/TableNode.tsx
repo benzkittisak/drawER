@@ -115,6 +115,7 @@ export const TableNode = memo(function TableNode({
               <div className={'node__fname' + (f.primary ? ' pk' : '')}>{f.name}</div>
               <div className="node__ftype">
                 {f.type}
+                {f.array ? '[]' : ''}
                 {!f.notNull && !f.primary ? '?' : ''}
               </div>
             </div>

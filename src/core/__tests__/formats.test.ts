@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { createDiagram, createField, createTable } from '../model/factory';
 import { diagramToDbml } from '../dbml/export';
 import { dbmlToDiagram } from '../dbml/import';
 import { diagramToMarkdown } from '../markdown/export';
@@ -6,6 +7,12 @@ import { diagramToMermaid } from '../mermaid/export';
 import { buildSampleDiagram } from '../sql/__tests__/sampleModel';
 
 const d = buildSampleDiagram();
+
+function arrayDiagram() {
+  const a = createDiagram('arr', 'Arr', 'postgres');
+  a.tables.push(createTable('t', 't', { fields: [createField('f', 'tags', 'text', { array: true })] }));
+  return a;
+}
 
 describe('Mermaid export', () => {
   it('emits erDiagram with tables and a parent||--o{child relation', () => {
@@ -24,6 +31,15 @@ describe('Markdown export', () => {
     expect(md).toContain('| Column | Type | Key | Nullable | Default | Description |');
     expect(md).toMatch(/email .*UQ/);
     expect(md).toContain('## Relationships');
+  });
+});
+
+describe('array columns', () => {
+  it('render with a [] suffix across dbml / mermaid / markdown', () => {
+    const a = arrayDiagram();
+    expect(diagramToDbml(a)).toContain('tags text[]');
+    expect(diagramToMermaid(a)).toContain('text[] tags');
+    expect(diagramToMarkdown(a)).toContain('text[]');
   });
 });
 

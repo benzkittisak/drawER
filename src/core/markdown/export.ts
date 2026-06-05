@@ -14,7 +14,8 @@ function tableSection(t: Table, fkFieldIds: Set<string>): string {
     const key = [f.primary ? 'PK' : '', fkFieldIds.has(f.id) ? 'FK' : '', f.unique ? 'UQ' : '']
       .filter(Boolean)
       .join(', ');
-    const type = f.size != null ? `${f.type}(${f.size}${f.scale != null ? ',' + f.scale : ''})` : f.type;
+    const type =
+      (f.size != null ? `${f.type}(${f.size}${f.scale != null ? ',' + f.scale : ''})` : f.type) + (f.array ? '[]' : '');
     const nullable = f.notNull || f.primary ? 'No' : 'Yes';
     lines.push(
       `| ${f.name} | ${type} | ${key} | ${nullable} | ${f.default ?? ''} | ${f.comment ?? ''} |`,

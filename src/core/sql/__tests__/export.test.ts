@@ -1,8 +1,15 @@
 import { describe, expect, it } from 'vitest';
+import { createDiagram, createField, createTable } from '../../model/factory';
 import { exportSql } from '../export';
 import { buildSampleDiagram } from './sampleModel';
 
 const d = buildSampleDiagram();
+
+function arrayDiagram() {
+  const a = createDiagram('arr', 'Arr', 'postgres');
+  a.tables.push(createTable('t', 't', { fields: [createField('f', 'tags', 'text', { array: true })] }));
+  return a;
+}
 
 describe('SQL export — per-dialect behavior', () => {
   it('postgres: SERIAL, native enum type, double quotes, FK with ON DELETE', () => {
@@ -47,6 +54,14 @@ describe('SQL export — per-dialect behavior', () => {
   it('mariadb: behaves like mysql (backticks + AUTO_INCREMENT)', () => {
     const sql = exportSql(d, 'mariadb');
     expect(sql).toContain('`id` INT NOT NULL AUTO_INCREMENT');
+  });
+
+  it('array columns render as TYPE[] on postgres, base type elsewhere', () => {
+    const a = arrayDiagram();
+    expect(exportSql(a, 'postgres')).toContain('"tags" TEXT[]');
+    const mysql = exportSql(a, 'mysql');
+    expect(mysql).toContain('`tags` TEXT');
+    expect(mysql).not.toContain('[]');
   });
 
   it('schemaQualified option qualifies table names', () => {

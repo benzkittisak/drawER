@@ -37,6 +37,7 @@ const boolean = (v: unknown): boolean => v === true;
 const arr = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
 const optStr = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined);
 const optNum = (v: unknown): number | undefined => (typeof v === 'number' ? v : undefined);
+const optBool = (v: unknown): true | undefined => (v === true ? true : undefined);
 
 const position = (v: unknown): Position => {
   const p = obj(v);
@@ -56,6 +57,7 @@ function normField(v: unknown): Field {
     unique: boolean(f.unique),
     notNull: boolean(f.notNull),
     autoIncrement: boolean(f.autoIncrement),
+    array: optBool(f.array),
     default: optStr(f.default),
     comment: optStr(f.comment),
     customTypeId: optStr(f.customTypeId),

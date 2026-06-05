@@ -18,10 +18,11 @@ function refOp(card: Cardinality): string {
 }
 
 function fieldType(d: Diagram, f: Field): string {
+  const suffix = f.array ? '[]' : '';
   const named = d.enums.find((e) => e.id === f.customTypeId || e.name === f.type);
-  if (named) return named.name;
-  if (f.size != null) return `${f.type}(${f.size}${f.scale != null ? ',' + f.scale : ''})`;
-  return f.type;
+  if (named) return named.name + suffix;
+  if (f.size != null) return `${f.type}(${f.size}${f.scale != null ? ',' + f.scale : ''})${suffix}`;
+  return f.type + suffix;
 }
 
 function fieldSettings(f: Field): string {

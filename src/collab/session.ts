@@ -320,6 +320,18 @@ class CollabSession {
     this.emitConnection();
   }
 
+  /**
+   * Close the open diagram entirely (providers, doc, presence) — e.g. when returning to the
+   * dashboard. Without this the websocket would keep the room's doc alive on the sync server,
+   * and IndexedDB deletion of the diagram would stay blocked by the open y-indexeddb handle.
+   */
+  close(): void {
+    this.teardown();
+    this.roomId = null;
+    this.onOthers?.([]);
+    this.emitConnection();
+  }
+
   private disconnect(): void {
     if (this.ws) {
       this.ws.awareness.off('change', this.flushPresence);

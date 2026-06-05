@@ -33,7 +33,7 @@ function StaticNode({ t }: { t: Table }) {
           <div className="node__grip" style={{ opacity: 0.3 }} />
           {f.primary && <Icon name="key" size={13} className="node__key" />}
           <div className={'node__fname' + (f.primary ? ' pk' : '')}>{f.name}</div>
-          <div className="node__ftype">{f.type}</div>
+          <div className="node__ftype">{f.type}{f.array ? '[]' : ''}</div>
         </div>
       ))}
     </div>

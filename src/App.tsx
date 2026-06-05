@@ -5,7 +5,7 @@
  */
 import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react';
 import { createDiagram, newId } from '@core';
-import { saveDiagram } from '@store';
+import { saveDiagram, useEditorStore } from '@store';
 
 // Views are code-split: the Dashboard-first load no longer pulls the Editor (Canvas, SVG layers,
 // every modal) or History up front — each becomes its own async chunk, fetched on first navigation.
@@ -47,6 +47,9 @@ export function App() {
     const onPop = () => {
       if (isEmbedFromUrl()) return;
       const room = roomFromUrl();
+      // Landing on the dashboard must fully close the session — a lingering websocket keeps the
+      // room's doc alive on the sync server, which resurrects diagrams deleted from the dashboard.
+      if (!room) useEditorStore.getState().closeDiagram();
       setOpenId(room);
       setJoinId(room);
       setRoute(room ? 'editor' : 'dashboard');
@@ -63,6 +66,7 @@ export function App() {
   };
 
   const goDashboard = () => {
+    useEditorStore.getState().closeDiagram(); // see onPop — never hold a live room on the dashboard
     setRoute('dashboard');
     setOpenId(null);
     setUrlRoom(null);

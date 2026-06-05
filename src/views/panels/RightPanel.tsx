@@ -72,7 +72,8 @@ export function RightPanel({
   focusCommentsKey?: number;
 }) {
   const [tab, setTab] = useState<Tab>('people');
-  const [addRelOpen, setAddRelOpen] = useState(false);
+  /** Non-null = Add-relationship modal open; `fieldId` pre-selects that column as the FK side. */
+  const [addRel, setAddRel] = useState<{ fieldId?: string } | null>(null);
   const [selected, setSelected] = useSelection();
   const [selectedRel, setSelectedRel] = useSelectedRel();
   const me = useIdentity();
@@ -115,7 +116,7 @@ export function RightPanel({
             <TableEditorPanel
               tableId={selected}
               onDeleted={() => setSelected(null)}
-              onAddForeignKey={() => setAddRelOpen(true)}
+              onAddForeignKey={(fieldId) => setAddRel({ fieldId })}
             />
           ) : (
             <div className="te-empty te-empty--pad">Click a table on the canvas to edit name, columns, and indexes.</div>
@@ -127,7 +128,7 @@ export function RightPanel({
         <>
           <div className="panel__head" style={{ padding: '8px 10px 4px' }}>
             <span className="panel__title">Relationship</span>
-            <Btn sm variant="primary" icon="plus" onClick={() => setAddRelOpen(true)}>
+            <Btn sm variant="primary" icon="plus" onClick={() => setAddRel({})}>
               Add
             </Btn>
           </div>
@@ -243,7 +244,9 @@ export function RightPanel({
           ))}
         </div>
       )}
-      {addRelOpen && <AddRelationshipModal fromTableId={selected ?? undefined} onClose={() => setAddRelOpen(false)} />}
+      {addRel && (
+        <AddRelationshipModal fromTableId={selected ?? undefined} fromFieldId={addRel.fieldId} onClose={() => setAddRel(null)} />
+      )}
     </div>
   );
 }

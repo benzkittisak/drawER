@@ -10,6 +10,10 @@ export class PostgresDialect extends BaseDialect {
     return true;
   }
 
+  supportsArray(): boolean {
+    return true;
+  }
+
   renderAutoIncrement(field: Field): AutoIncrementPlan {
     if (field.type === 'int8') return { typeOverride: 'BIGSERIAL' };
     if (field.type === 'int2') return { typeOverride: 'SMALLSERIAL' };

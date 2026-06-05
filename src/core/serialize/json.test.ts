@@ -27,6 +27,13 @@ describe('JSON interchange', () => {
     expect(parse(serialize(sample))).toEqual(sample);
   });
 
+  it('preserves an array-type column through round-trip', () => {
+    const d = parse(serialize(sample, undefined));
+    d.tables[0]!.fields[0]!.array = true;
+    const back = parse(serialize(d));
+    expect(back.tables[0]!.fields[0]!.array).toBe(true);
+  });
+
   it('parses from a JSON string', () => {
     const parsed = parse(serializeToString(sample));
     expect(parsed.tables.map((t) => t.name)).toEqual(['organizations', 'users']);

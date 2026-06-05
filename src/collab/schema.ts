@@ -31,6 +31,7 @@ function fieldToY(f: Field): YMap {
   m.set('unique', f.unique);
   m.set('notNull', f.notNull);
   m.set('autoIncrement', f.autoIncrement);
+  if (f.array) m.set('array', f.array);
   if (f.default != null) m.set('default', f.default);
   if (f.comment != null) m.set('comment', f.comment);
   if (f.customTypeId != null) m.set('customTypeId', f.customTypeId);
@@ -53,6 +54,7 @@ function yToField(m: YMap): Field {
     unique: !!m.get('unique'),
     notNull: !!m.get('notNull'),
     autoIncrement: !!m.get('autoIncrement'),
+    array: opt<boolean>('array'),
     default: opt<string>('default'),
     comment: opt<string>('comment'),
     customTypeId: opt<string>('customTypeId'),
@@ -359,6 +361,18 @@ export const mut = {
     const clone = yToField(fields.get(idx) as YMap);
     fields.delete(idx, 1);
     fields.insert(Math.max(0, Math.min(fields.length, toIndex)), [fieldToY(clone)]);
+  },
+  /** Rebuild the whole field order in one shot (for multi-column drag). `orderedIds` must be a full
+   *  permutation of the table's field ids — otherwise it's a no-op (guards against data loss). */
+  reorderFields(maps: DocMaps, tableId: string, orderedIds: string[]): void {
+    const t = tableMap(maps, tableId);
+    if (!t) return;
+    const fields = fieldArray(t);
+    const byId = new Map((fields.toArray() as YMap[]).map((m) => { const f = yToField(m); return [f.id, f]; }));
+    const next = orderedIds.filter((id) => byId.has(id));
+    if (next.length !== byId.size) return;
+    fields.delete(0, fields.length);
+    fields.push(next.map((id) => fieldToY(byId.get(id)!)));
   },
   addRelationship(maps: DocMaps, rel: Relationship): void {
     maps.rels.set(rel.id, relToY(rel));
